@@ -1,121 +1,70 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  // Puedes cambiar o agregar los nombres de tu equipo aquí
+  const integrantes = [
+    'Juan Pablo Escamilla Montilla - 202420580',
+    'Santiago David Guerrero Jaramillo - 20241903',
+    'Brayan Steven Candela Isaza - 20241501',
+    'Nicolle Andrea Paz Molineros - 202419714',
+  ]
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
+    <div className="container">
+      <header className="header">
+        <span className="badge">Proyecto Integrador I</span>
+        <h1>Organizador de Eventos Independientes</h1>
+        <p className="subtitle">
+          Mini-proyecto 1 &bull; Escuela de Ingeniería de Sistemas y Computación
+        </p>
+      </header>
+
+      <main className="grid">
+        {/* Tarjeta: Información General */}
+        <section className="card">
+          <h2>Información Académica</h2>
+          <div className="info-item">
+            <strong>Profesor:</strong>
+            <span>Fabián S. Valencia C.</span>
+          </div>
+          <div className="info-item">
+            <strong>Semestre:</strong>
+            <span>2026-II</span>
+          </div>
+          <div className="info-item">
+            <strong>Estado actual:</strong>
+            <span className="status-badge">Sprint 0: Configuración inicial</span>
+          </div>
+        </section>
+
+        {/* Tarjeta: Sobre el Proyecto */}
+        <section className="card">
+          <h2>Sobre el Proyecto</h2>
           <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
+            Herramienta diseñada para que organizadores independientes puedan
+            planificar, registrar y reprogramar el trabajo logístico (salón,
+            catering, proveedores) detectando sobrecargas diarias y visualizando
+            el progreso de cada evento.
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
+        {/* Tarjeta: Equipo */}
+        <section className="card full-width">
+          <h2>Integrantes del Grupo</h2>
+          <ul className="team-list">
+            {integrantes.map((nombre, index) => (
+              <li key={index} className="team-member">
+                <span>{nombre}</span>
+              </li>
+            ))}
           </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <footer className="footer">
+        <p>Front-end inicializado con React + Vite &bull; Listo para integrar con API REST</p>
+      </footer>
+    </div>
   )
 }
 
