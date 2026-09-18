@@ -1,13 +1,36 @@
+import { useState, useEffect } from 'react'
 import './App.css'
 
 function App() {
-  // Puedes cambiar o agregar los nombres de tu equipo aquí
+  const [mensajeBackend, setMensajeBackend] = useState('Conectando con la API...')
+  const [errorBackend, setErrorBackend] = useState(false)
+
   const integrantes = [
     'Juan Pablo Escamilla Montilla - 202420580',
     'Santiago David Guerrero Jaramillo - 20241903',
     'Brayan Steven Candela Isaza - 20241501',
     'Nicolle Andrea Paz Molineros - 202419714',
   ]
+
+  useEffect(() => {
+    // Si no está definida la variable en el .env, usa Render por defecto
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+
+    fetch(`${baseUrl}/api/db-test/`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Error en la respuesta del servidor')
+        return res.json()
+      })
+      .then((data) => {
+        setMensajeBackend(data.message)
+        setErrorBackend(false)
+      })
+      .catch((err) => {
+        console.error(err)
+        setMensajeBackend('Error al conectar con la API / Base de datos')
+        setErrorBackend(true)
+      })
+  }, [])
 
   return (
     <div className="container">
@@ -20,7 +43,7 @@ function App() {
       </header>
 
       <main className="grid">
-        {/* Tarjeta: Información General */}
+        {/* Tarjeta: Información Académica */}
         <section className="card">
           <h2>Información Académica</h2>
           <div className="info-item">
@@ -35,6 +58,17 @@ function App() {
             <strong>Estado actual:</strong>
             <span className="status-badge">Sprint 0: Configuración inicial</span>
           </div>
+        </section>
+
+        {/* Tarjeta: Prueba de Conexión Backend */}
+        <section className="card">
+          <h2>Estado Backend & BD</h2>
+          <p style={{ color: errorBackend ? '#e63946' : '#2a9d8f', fontWeight: 'bold' }}>
+            {mensajeBackend}
+          </p>
+          <small style={{ color: '#888' }}>
+            Endpoint: /api/db-test/
+          </small>
         </section>
 
         {/* Tarjeta: Sobre el Proyecto */}
@@ -62,7 +96,7 @@ function App() {
       </main>
 
       <footer className="footer">
-        <p>Front-end inicializado con React + Vite &bull; Listo para integrar con API REST</p>
+        <p>Front-end inicializado con React + Vite &bull; Integrado con Django REST Framework</p>
       </footer>
     </div>
   )
