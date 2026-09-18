@@ -6,8 +6,8 @@ Proyecto Integrador I (750018C, 2026-II), Universidad del Valle.
 ## Integrantes del Grupo
 
 - Juan Pablo Escamilla Montilla — 202420580
-- Santiago David Guerrero Jaramillo — 20241903
-- Brayan Steven Candela Isaza — 20241501
+- Santiago David Guerrero Jaramillo — 202419030
+- Brayan Steven Candela Isaza — 202415014
 - Nicolle Andrea Paz Molineros — 202419714
 
 ## Stack
@@ -22,7 +22,7 @@ Proyecto Integrador I (750018C, 2026-II), Universidad del Valle.
 
 1. Clona el repositorio:
     ```bash
-    git clone <URL_DE_TU_REPOSITORIO_FRONTEND>
+    git clone https://github.com/Grupo-3-Proyecto-Integrador-80-2026/Frontend.git
     ```
    
 2. Entra a la carpeta:
