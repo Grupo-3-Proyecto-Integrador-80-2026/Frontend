@@ -7,8 +7,8 @@ function App() {
 
   const integrantes = [
     'Juan Pablo Escamilla Montilla - 202420580',
-    'Santiago David Guerrero Jaramillo - 20241903',
-    'Brayan Steven Candela Isaza - 20241501',
+    'Santiago David Guerrero Jaramillo - 202419030',
+    'Brayan Steven Candela Isaza - 202415014',
     'Nicolle Andrea Paz Molineros - 202419714',
   ]
 
