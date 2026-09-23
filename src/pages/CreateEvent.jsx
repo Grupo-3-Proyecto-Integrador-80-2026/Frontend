@@ -164,6 +164,7 @@ export default function CreateEvent() {
       setFormData(INITIAL_FORM_STATE)
       setErrors({})
       setTouched({})
+
     } catch (err) {
       console.error(err)
       setFeedback({
@@ -205,7 +206,14 @@ export default function CreateEvent() {
               className="btn-alert-outline"
               onClick={() => navigate('/')}
             >
-              Ir al Inicio
+              Inicio
+            </button>
+            <button
+              type="button"
+              className="btn-alert-outline"
+              onClick={() => navigate(`/evento/${feedback.details.id}`)}
+            >
+              Ver Detalles
             </button>
             <button
               type="button"
