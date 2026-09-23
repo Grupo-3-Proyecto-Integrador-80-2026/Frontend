@@ -10,6 +10,13 @@ import {
   IconMapPin,
   IconX,
 } from '../components/Icons'
+import {
+  validateEventField,
+  validateEventForm,
+  autoFormatDateInput,
+  formatDateToISO,
+  formatDateFromISO,
+} from '../utils/validators'
 
 const EVENT_TYPES = [
   { value: 'wedding', label: 'Boda' },
@@ -41,43 +48,48 @@ export default function CreateEvent() {
   // Estado controlado del formulario
   const [formData, setFormData] = useState(INITIAL_FORM_STATE)
   const [errors, setErrors] = useState({})
+  const [touched, setTouched] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState({ type: null, message: '', details: null })
 
   const limitHours = 6.0
   const consumedHours = 3.5
 
-  // Manejador genérico de cambios para formulario controlado
+  // Manejador de cambios con formateo DD/MM/AAAA y re-validación inmediata
   const handleChange = (e) => {
     const { name, value } = e.target
+
+    // Auto-formatear fecha a DD/MM/AAAA mientras el usuario escribe
+    const finalValue = name === 'event_date' ? autoFormatDateInput(value) : value
+
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: finalValue,
     }))
 
-    if (errors[name]) {
+    // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
+    if (touched[name] || errors[name]) {
+      const fieldError = validateEventField(name, finalValue)
       setErrors((prev) => ({
         ...prev,
-        [name]: null,
+        [name]: fieldError,
       }))
     }
   }
 
-  // Validación local del formulario
-  const validateForm = () => {
-    const newErrors = {}
+  // Manejador de pérdida de foco (onBlur) para validación inline
+  const handleBlur = (e) => {
+    const { name, value } = e.target
+    setTouched((prev) => ({
+      ...prev,
+      [name]: true,
+    }))
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'El nombre del evento es obligatorio.'
-    } else if (formData.name.trim().length < 3) {
-      newErrors.name = 'El nombre debe tener al menos 3 caracteres.'
-    }
-
-    if (!formData.event_date) {
-      newErrors.event_date = 'Debes seleccionar una fecha para el evento.'
-    }
-
-    return newErrors
+    const fieldError = validateEventField(name, value)
+    setErrors((prev) => ({
+      ...prev,
+      [name]: fieldError,
+    }))
   }
 
   // Manejador del envío del formulario
@@ -85,12 +97,21 @@ export default function CreateEvent() {
     e.preventDefault()
     setFeedback({ type: null, message: '', details: null })
 
-    const formValidationErrors = validateForm()
-    if (Object.keys(formValidationErrors).length > 0) {
-      setErrors(formValidationErrors)
+    // Marcar todos los campos como tocados al intentar enviar
+    const allTouched = Object.keys(formData).reduce((acc, key) => {
+      acc[key] = true
+      return acc
+    }, {})
+    setTouched(allTouched)
+
+    // Validar todos los campos
+    const formErrors = validateEventForm(formData)
+    setErrors(formErrors)
+
+    if (Object.keys(formErrors).length > 0) {
       setFeedback({
         type: 'error',
-        message: 'Por favor, corrige los campos requeridos antes de guardar.',
+        message: 'Por favor, corrige los errores en los campos requeridos antes de guardar.',
       })
       return
     }
@@ -99,12 +120,15 @@ export default function CreateEvent() {
 
     const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
+    // Convertir la fecha DD/MM/AAAA al formato ISO AAAA-MM-DD esperado por Django REST Framework
+    const isoEventDate = formatDateToISO(formData.event_date)
+
     const payload = {
       name: formData.name.trim(),
       event_type: formData.event_type,
       contact: formData.contact.trim(),
       location: formData.location.trim(),
-      event_date: formData.event_date,
+      event_date: isoEventDate,
       status: formData.status,
       description: formData.description.trim(),
     }
@@ -127,13 +151,19 @@ export default function CreateEvent() {
         )
       }
 
+      const formattedDisplayDate = formatDateFromISO(data.event_date)
+
       setFeedback({
         type: 'success',
         message: `¡Evento "${data.name}" registrado con éxito en el sistema!`,
-        details: data,
+        details: {
+          ...data,
+          display_date: formattedDisplayDate,
+        },
       })
       setFormData(INITIAL_FORM_STATE)
       setErrors({})
+      setTouched({})
     } catch (err) {
       console.error(err)
       setFeedback({
@@ -145,10 +175,11 @@ export default function CreateEvent() {
     }
   }
 
-  // Restablecer formulario
+  // Restablecer formulario y estados de validación
   const handleReset = () => {
     setFormData(INITIAL_FORM_STATE)
     setErrors({})
+    setTouched({})
     setFeedback({ type: null, message: '', details: null })
   }
 
@@ -156,7 +187,7 @@ export default function CreateEvent() {
     <div className="create-page-container">
       {/* Alerta de Feedback (Éxito o Error) */}
       {feedback.type === 'success' && (
-        <div className="banner-alert banner-success">
+        <div className="banner-alert banner-success" role="alert">
           <div className="banner-icon-side">
             <IconCheckCircle size={20} className="icon-emerald" />
           </div>
@@ -164,7 +195,7 @@ export default function CreateEvent() {
             <strong>{feedback.message}</strong>
             {feedback.details?.id && (
               <p className="banner-subtext">
-                ID asignado: #{feedback.details.id} &bull; Tipo: {feedback.details.event_type} &bull; Fecha: {feedback.details.event_date}
+                ID asignado: #{feedback.details.id} &bull; Tipo: {feedback.details.event_type} &bull; Fecha: {feedback.details.display_date || feedback.details.event_date}
               </p>
             )}
           </div>
@@ -188,16 +219,17 @@ export default function CreateEvent() {
       )}
 
       {feedback.type === 'error' && (
-        <div className="banner-alert banner-error">
+        <div className="banner-alert banner-error" role="alert">
           <div className="banner-icon-side">
             <IconAlertTriangle size={20} className="icon-rose" />
           </div>
           <div className="banner-content">
-            <strong>Error:</strong> {feedback.message}
+            <strong>Atención:</strong> {feedback.message}
           </div>
           <button
             type="button"
             className="btn-close-alert"
+            aria-label="Cerrar alerta"
             onClick={() => setFeedback({ type: null, message: '', details: null })}
           >
             <IconX size={16} />
@@ -221,20 +253,33 @@ export default function CreateEvent() {
           <form onSubmit={handleSubmit} onReset={handleReset} noValidate className="form-body-pro">
             {/* Nombre del Evento */}
             <div className="field-group">
-              <label htmlFor="name" className="field-label">
-                Nombre del Evento <span className="req-star">*</span>
-              </label>
+              <div className="field-label-row">
+                <label htmlFor="name" className="field-label">
+                  Nombre del Evento <span className="req-star">*</span>
+                </label>
+                <span className="char-counter">
+                  {formData.name.length}/200
+                </span>
+              </div>
               <input
                 id="name"
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder="Ej: Aniversario Corporativo 25 Años"
-                className={`field-input ${errors.name ? 'field-input-error' : ''}`}
+                className={`field-input ${touched.name && errors.name ? 'field-input-error' : ''}`}
                 required
+                maxLength={200}
+                aria-invalid={touched.name && !!errors.name}
+                aria-describedby={errors.name ? 'name-error' : undefined}
               />
-              {errors.name && <span className="field-error-text">{errors.name}</span>}
+              {touched.name && errors.name && (
+                <span id="name-error" className="field-error-text">
+                  {errors.name}
+                </span>
+              )}
             </div>
 
             {/* Fila: Tipo y Estado */}
@@ -248,7 +293,9 @@ export default function CreateEvent() {
                   name="event_type"
                   value={formData.event_type}
                   onChange={handleChange}
-                  className="field-input field-select"
+                  onBlur={handleBlur}
+                  className={`field-input field-select ${touched.event_type && errors.event_type ? 'field-input-error' : ''}`}
+                  required
                 >
                   {EVENT_TYPES.map((type) => (
                     <option key={type.value} value={type.value}>
@@ -256,6 +303,9 @@ export default function CreateEvent() {
                     </option>
                   ))}
                 </select>
+                {touched.event_type && errors.event_type && (
+                  <span className="field-error-text">{errors.event_type}</span>
+                )}
               </div>
 
               <div className="field-group">
@@ -267,7 +317,9 @@ export default function CreateEvent() {
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
-                  className="field-input field-select"
+                  onBlur={handleBlur}
+                  className={`field-input field-select ${touched.status && errors.status ? 'field-input-error' : ''}`}
+                  required
                 >
                   {STATUS_OPTIONS.map((st) => (
                     <option key={st.value} value={st.value}>
@@ -275,26 +327,39 @@ export default function CreateEvent() {
                     </option>
                   ))}
                 </select>
+                {touched.status && errors.status && (
+                  <span className="field-error-text">{errors.status}</span>
+                )}
               </div>
             </div>
 
-            {/* Fila: Fecha y Contacto */}
+            {/* Fila: Fecha Prevista (DD/MM/AAAA) y Contacto */}
             <div className="field-row-2">
               <div className="field-group">
                 <label htmlFor="event_date" className="field-label">
-                  Fecha Prevista <span className="req-star">*</span>
+                  Fecha Prevista (DD/MM/AAAA) <span className="req-star">*</span>
                 </label>
                 <input
                   id="event_date"
-                  type="date"
+                  type="text"
                   name="event_date"
                   value={formData.event_date}
                   onChange={handleChange}
-                  className={`field-input ${errors.event_date ? 'field-input-error' : ''}`}
+                  onBlur={handleBlur}
+                  placeholder="DD/MM/AAAA (ej. 28/10/2026)"
+                  maxLength={10}
+                  className={`field-input ${touched.event_date && errors.event_date ? 'field-input-error' : ''}`}
                   required
+                  aria-invalid={touched.event_date && !!errors.event_date}
+                  aria-describedby={errors.event_date ? 'date-error' : 'date-hint'}
                 />
-                {errors.event_date && (
-                  <span className="field-error-text">{errors.event_date}</span>
+                <small id="date-hint" className="field-hint">
+                  Formato: <strong>DD/MM/AAAA</strong> (Día/Mes/Año)
+                </small>
+                {touched.event_date && errors.event_date && (
+                  <span id="date-error" className="field-error-text">
+                    {errors.event_date}
+                  </span>
                 )}
               </div>
 
@@ -308,9 +373,14 @@ export default function CreateEvent() {
                   name="contact"
                   value={formData.contact}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder="Ej: Grupo Financiero Andino"
-                  className="field-input"
+                  maxLength={255}
+                  className={`field-input ${touched.contact && errors.contact ? 'field-input-error' : ''}`}
                 />
+                {touched.contact && errors.contact && (
+                  <span className="field-error-text">{errors.contact}</span>
+                )}
               </div>
             </div>
 
@@ -325,25 +395,40 @@ export default function CreateEvent() {
                 name="location"
                 value={formData.location}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder="Ej: Club Campestre Central, Salón Principal"
-                className="field-input"
+                maxLength={255}
+                className={`field-input ${touched.location && errors.location ? 'field-input-error' : ''}`}
               />
+              {touched.location && errors.location && (
+                <span className="field-error-text">{errors.location}</span>
+              )}
             </div>
 
             {/* Descripción / Notas */}
             <div className="field-group">
-              <label htmlFor="description" className="field-label">
-                Descripción o Alcance Técnico
-              </label>
+              <div className="field-label-row">
+                <label htmlFor="description" className="field-label">
+                  Descripción o Alcance Técnico
+                </label>
+                <span className="char-counter">
+                  {formData.description.length}/2000
+                </span>
+              </div>
               <textarea
                 id="description"
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder="Notas para el montaje, requerimientos logísticos o acuerdos con el cliente..."
                 rows="3"
-                className="field-input field-textarea"
+                maxLength={2000}
+                className={`field-input field-textarea ${touched.description && errors.description ? 'field-input-error' : ''}`}
               />
+              {touched.description && errors.description && (
+                <span className="field-error-text">{errors.description}</span>
+              )}
             </div>
 
             {/* Impacto en Capacidad Diaria */}
@@ -413,7 +498,7 @@ export default function CreateEvent() {
                 <span>Fecha:</span>
               </span>
               <span className="p-value">
-                {formData.event_date || <em className="muted">Por definir</em>}
+                {formData.event_date || <em className="muted">DD/MM/AAAA</em>}
               </span>
             </div>
 
