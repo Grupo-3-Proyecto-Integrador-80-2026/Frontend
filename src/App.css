@@ -899,13 +899,29 @@
   color: var(--brand-700);
   font-weight: 700;
   font-size: 0.75rem;
+  border: none;
   border-radius: 8px;
   text-decoration: none;
+  cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .btn-manage-event:hover {
   background-color: var(--brand-100);
+}
+
+/* Texto de descripción en la vista de detalle del evento */
+.detail-desc-text {
+  margin: 0;
+  white-space: pre-line;
+  color: var(--slate-600);
+}
+
+/* Formulario de edición inline dentro de una tarjeta de gestión */
+.event-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 
 /* ==========================================================================
