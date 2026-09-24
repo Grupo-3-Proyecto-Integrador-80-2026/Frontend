@@ -34,7 +34,7 @@ const STATUS_OPTIONS = [
 
 const INITIAL_FORM_STATE = {
   name: '',
-  event_type: 'wedding',
+  event_type: '',
   contact: '',
   location: '',
   event_date: '',
@@ -305,6 +305,9 @@ export default function CreateEvent() {
                   className={`field-input field-select ${touched.event_type && errors.event_type ? 'field-input-error' : ''}`}
                   required
                 >
+                  <option value="" disabled>
+                    Selecciona un tipo
+                  </option>
                   {EVENT_TYPES.map((type) => (
                     <option key={type.value} value={type.value}>
                       {type.label}
@@ -496,7 +499,9 @@ export default function CreateEvent() {
             <div className="preview-item">
               <span className="p-label">Categoría:</span>
               <span className="badge-preview-chip">
-                {EVENT_TYPES.find((t) => t.value === formData.event_type)?.label}
+                {EVENT_TYPES.find((t) => t.value === formData.event_type)?.label || (
+                  <em className="muted">Sin definir</em>
+                )}
               </span>
             </div>
 
