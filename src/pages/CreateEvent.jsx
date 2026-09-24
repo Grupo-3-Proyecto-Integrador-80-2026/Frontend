@@ -478,11 +478,11 @@ export default function CreateEvent() {
         <aside className="preview-card-pro">
           <div className="preview-card-header">
             <h3>Vista Previa del Estado</h3>
-            <span className="badge-preview-tag">React State</span>
+            <span className="badge-preview-tag">En vivo</span>
           </div>
 
           <p className="preview-intro">
-            Los valores se sincronizan en tiempo real mediante el formulario controlado:
+            Así quedará registrado tu evento.
           </p>
 
           <div className="preview-details-box">
