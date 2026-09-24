@@ -1,7 +1,33 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { IconMapPin, IconCalendar, IconUser } from '../components/Icons'
-import { formatDateFromISO } from '../utils/validators'
+import { IconMapPin, IconCalendar, IconUser, IconClock, IconInfo } from '../components/Icons'
+import { formatDateFromISO, TASK_TYPES, TASK_PRIORITIES } from '../utils/validators'
+
+const EVENT_TYPES = [
+  { value: 'wedding', label: 'Boda' },
+  { value: 'social', label: 'Social' },
+  { value: 'corporate', label: 'Corporativo' },
+  { value: 'birthday', label: 'Cumpleaños' },
+  { value: 'other', label: 'Otro' },
+]
+
+const EVENT_STATUS = [
+  { value: 'planning', label: 'Planificación' },
+  { value: 'in_progress', label: 'En Producción' },
+  { value: 'finished', label: 'Finalizado' },
+]
+
+const SUBTASK_STATUS = [
+  { value: 'pending', label: 'Pendiente' },
+  { value: 'in_progress', label: 'En curso' },
+  { value: 'done', label: 'Completada' },
+  { value: 'postponed', label: 'Aplazada' },
+]
+
+// Traduce el valor crudo del backend a su etiqueta en español
+function getOptionLabel(options, value) {
+  return options.find((option) => option.value === value)?.label || 'No especificado'
+}
 
 export default function EventDetail() {
   const { id } = useParams()
@@ -50,14 +76,17 @@ export default function EventDetail() {
     )
   }
 
+  const subtasks = Array.isArray(event.subtasks) ? event.subtasks : []
+
   return (
-    <div className="page-container" style={{ padding: '2rem' }}>
+    <div className="create-page-container">
       <div className="form-card-pro">
         <div className="form-card-header">
           <div>
             <h2 className="form-heading">{event.name}</h2>
             <p className="form-subheading">
-              <span className="badge-status-chip">{event.status}</span> • Tipo: {event.event_type}
+              <span className="badge-status-chip">{getOptionLabel(EVENT_STATUS, event.status)}</span>{' '}
+              • Tipo: {getOptionLabel(EVENT_TYPES, event.event_type)}
             </p>
           </div>
         </div>
@@ -92,6 +121,66 @@ export default function EventDetail() {
           </div>
         </div>
       </div>
+
+      {/* Gestiones (subtareas logísticas) del evento */}
+      <section className="events-section">
+        <div className="section-header-row">
+          <div>
+            <h2 className="section-title">Gestiones del Evento</h2>
+            <p className="section-subtitle">Subtareas logísticas para mantener la producción en marcha</p>
+          </div>
+          <span className="badge-chip">
+            {subtasks.length} {subtasks.length === 1 ? 'gestión' : 'gestiones'}
+          </span>
+        </div>
+
+        {subtasks.length === 0 ? (
+          <div className="card-pro">
+            <p className="muted">
+              Aún no hay gestiones en este evento. Agrega la primera para empezar a organizar la logística.
+            </p>
+          </div>
+        ) : (
+          <div className="events-cards-grid">
+            {subtasks.map((task) => (
+              <div key={task.id} className="event-card-item">
+                <div className="event-card-top">
+                  <span className="event-status-badge">
+                    {getOptionLabel(SUBTASK_STATUS, task.status)}
+                  </span>
+                  <span className="event-date">
+                    <IconCalendar size={13} />
+                    <span>
+                      {task.scheduled_date ? formatDateFromISO(task.scheduled_date) : 'N/A'}
+                    </span>
+                  </span>
+                </div>
+
+                <h3 className="event-name">{task.name}</h3>
+                <p className="event-client">Tipo: {getOptionLabel(TASK_TYPES, task.type)}</p>
+
+                <div className="event-details-list">
+                  <div className="event-detail-row">
+                    <IconClock size={14} />
+                    <span>
+                      Horas estimadas:{' '}
+                      {task.estimated_hours != null && task.estimated_hours !== ''
+                        ? `${Number(task.estimated_hours).toFixed(1)} hrs`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="event-detail-row">
+                    <IconInfo size={14} />
+                    <span>Prioridad: {getOptionLabel(TASK_PRIORITIES, task.priority)}</span>
+                  </div>
+                </div>
+
+                {task.note && <p className="event-client">Nota: {task.note}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
