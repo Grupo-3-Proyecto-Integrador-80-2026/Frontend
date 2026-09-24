@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { IconMapPin, IconCalendar, IconUser, IconClock } from '../components/Icons'
+import { IconMapPin, IconCalendar, IconUser } from '../components/Icons'
 import { formatDateFromISO } from '../utils/validators'
 
 export default function EventDetail() {
