@@ -17,23 +17,11 @@ import {
   autoFormatDateInput,
   validateSubtaskField,
   validateSubtaskForm,
+  EVENT_TYPES,
+  EVENT_STATUSES,
   TASK_TYPES,
   TASK_PRIORITIES,
 } from '../utils/validators'
-
-const EVENT_TYPES = [
-  { value: 'wedding', label: 'Boda' },
-  { value: 'social', label: 'Social' },
-  { value: 'corporate', label: 'Corporativo' },
-  { value: 'birthday', label: 'Cumpleaños' },
-  { value: 'other', label: 'Otro' },
-]
-
-const EVENT_STATUS = [
-  { value: 'planning', label: 'Planificación' },
-  { value: 'in_progress', label: 'En Producción' },
-  { value: 'finished', label: 'Finalizado' },
-]
 
 const SUBTASK_STATUS = [
   { value: 'pending', label: 'Pendiente' },
@@ -254,7 +242,7 @@ export default function EventDetail() {
           <div>
             <h2 className="form-heading">{event.name}</h2>
             <p className="form-subheading">
-              <span className="badge-status-chip">{getOptionLabel(EVENT_STATUS, event.status)}</span>{' '}
+              <span className="badge-status-chip">{getOptionLabel(EVENT_STATUSES, event.status)}</span>{' '}
               • Tipo: {getOptionLabel(EVENT_TYPES, event.event_type)}
             </p>
           </div>
