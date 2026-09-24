@@ -16,21 +16,9 @@ import {
   autoFormatDateInput,
   formatDateToISO,
   formatDateFromISO,
+  EVENT_TYPES,
+  EVENT_STATUSES,
 } from '../utils/validators'
-
-const EVENT_TYPES = [
-  { value: 'wedding', label: 'Boda' },
-  { value: 'social', label: 'Social' },
-  { value: 'corporate', label: 'Corporativo' },
-  { value: 'birthday', label: 'Cumpleaños' },
-  { value: 'other', label: 'Otro' },
-]
-
-const STATUS_OPTIONS = [
-  { value: 'planning', label: 'Planificación' },
-  { value: 'in_progress', label: 'En Producción' },
-  { value: 'finished', label: 'Finalizado' },
-]
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -332,7 +320,7 @@ export default function CreateEvent() {
                   className={`field-input field-select ${touched.status && errors.status ? 'field-input-error' : ''}`}
                   required
                 >
-                  {STATUS_OPTIONS.map((st) => (
+                  {EVENT_STATUSES.map((st) => (
                     <option key={st.value} value={st.value}>
                       {st.label}
                     </option>
@@ -518,7 +506,7 @@ export default function CreateEvent() {
             <div className="preview-item">
               <span className="p-label">Estado:</span>
               <span className="badge-status-chip">
-                {STATUS_OPTIONS.find((s) => s.value === formData.status)?.label}
+                {EVENT_STATUSES.find((s) => s.value === formData.status)?.label}
               </span>
             </div>
 
