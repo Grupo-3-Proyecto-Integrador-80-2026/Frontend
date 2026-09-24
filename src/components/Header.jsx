@@ -13,7 +13,7 @@ export default function Header({
       <div className="header-left">
         <div className="header-meta">
           <span className="date-badge">
-            Jueves, 24 de Octubre
+            {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
           </span>
           <span className="meta-separator">•</span>
           <span className="subtitle-text">{subtitle}</span>
