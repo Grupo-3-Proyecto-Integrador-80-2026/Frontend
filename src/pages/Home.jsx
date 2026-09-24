@@ -83,7 +83,7 @@ export default function Home() {
         return res.json()
       })
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           const formatted = data.map((ev) => ({
             id: ev.id,
             name: ev.name,
