@@ -34,7 +34,7 @@ const STATUS_OPTIONS = [
 
 const INITIAL_FORM_STATE = {
   name: '',
-  event_type: 'wedding',
+  event_type: '',
   contact: '',
   location: '',
   event_date: '',
@@ -305,6 +305,9 @@ export default function CreateEvent() {
                   className={`field-input field-select ${touched.event_type && errors.event_type ? 'field-input-error' : ''}`}
                   required
                 >
+                  <option value="" disabled>
+                    Selecciona un tipo
+                  </option>
                   {EVENT_TYPES.map((type) => (
                     <option key={type.value} value={type.value}>
                       {type.label}
@@ -465,7 +468,7 @@ export default function CreateEvent() {
                 className="btn-submit-pro"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Guardando...' : 'Dar de Alta Evento'}
+                {isSubmitting ? 'Guardando...' : 'Guardar Evento'}
               </button>
             </div>
           </form>
@@ -475,11 +478,11 @@ export default function CreateEvent() {
         <aside className="preview-card-pro">
           <div className="preview-card-header">
             <h3>Vista Previa del Estado</h3>
-            <span className="badge-preview-tag">React State</span>
+            <span className="badge-preview-tag">En vivo</span>
           </div>
 
           <p className="preview-intro">
-            Los valores se sincronizan en tiempo real mediante el formulario controlado:
+            Así quedará registrado tu evento.
           </p>
 
           <div className="preview-details-box">
@@ -496,7 +499,9 @@ export default function CreateEvent() {
             <div className="preview-item">
               <span className="p-label">Categoría:</span>
               <span className="badge-preview-chip">
-                {EVENT_TYPES.find((t) => t.value === formData.event_type)?.label}
+                {EVENT_TYPES.find((t) => t.value === formData.event_type)?.label || (
+                  <em className="muted">Sin definir</em>
+                )}
               </span>
             </div>
 

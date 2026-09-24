@@ -242,7 +242,7 @@ export default function Home() {
 
               <div className="event-card-footer">
                 <Link to={`/evento/${ev.id}`} className="btn-manage-event">
-                  Gestionar en Mesa
+                  Gestionar Evento
                 </Link>
               </div>
             </div>
