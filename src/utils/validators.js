@@ -2,8 +2,30 @@
  * Utilidades de validación y formateo en cliente para formularios de eventos.
  */
 
-const ALLOWED_EVENT_TYPES = ['wedding', 'social', 'corporate', 'birthday', 'other']
-const ALLOWED_STATUSES = ['planning', 'in_progress', 'finished']
+/**
+ * Tipos de evento disponibles, con sus etiquetas en español.
+ * @type {Array<{value: string, label: string}>}
+ */
+export const EVENT_TYPES = [
+  { value: 'wedding', label: 'Boda' },
+  { value: 'social', label: 'Social' },
+  { value: 'corporate', label: 'Corporativo' },
+  { value: 'birthday', label: 'Cumpleaños' },
+  { value: 'other', label: 'Otro' },
+]
+
+/**
+ * Estados del evento disponibles, con sus etiquetas en español.
+ * @type {Array<{value: string, label: string}>}
+ */
+export const EVENT_STATUSES = [
+  { value: 'planning', label: 'Planificación' },
+  { value: 'in_progress', label: 'En Producción' },
+  { value: 'finished', label: 'Finalizado' },
+]
+
+const ALLOWED_EVENT_TYPES = EVENT_TYPES.map((option) => option.value)
+const ALLOWED_STATUSES = EVENT_STATUSES.map((option) => option.value)
 
 /**
  * Tipos de gestión (subtarea logística) disponibles, con sus etiquetas en español.
