@@ -468,7 +468,7 @@ export default function CreateEvent() {
                 className="btn-submit-pro"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Guardando...' : 'Dar de Alta Evento'}
+                {isSubmitting ? 'Guardando...' : 'Guardar Evento'}
               </button>
             </div>
           </form>
