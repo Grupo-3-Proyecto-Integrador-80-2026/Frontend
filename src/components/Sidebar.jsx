@@ -14,7 +14,16 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
       {isMobileOpen && (
         <div
           className="mobile-backdrop"
+          role="button"
+          tabIndex={0}
+          aria-label="Cerrar menú"
           onClick={onCloseMobile}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onCloseMobile()
+            }
+          }}
         />
       )}
 
