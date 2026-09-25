@@ -899,13 +899,40 @@
   color: var(--brand-700);
   font-weight: 700;
   font-size: 0.75rem;
+  border: none;
   border-radius: 8px;
   text-decoration: none;
+  cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .btn-manage-event:hover {
   background-color: var(--brand-100);
+}
+
+/* Fila Editar / Eliminar dentro del pie de una tarjeta de gestión */
+.event-card-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.event-card-actions > * {
+  flex: 1;
+}
+
+/* Texto de descripción en la vista de detalle del evento */
+.detail-desc-text {
+  margin: 0;
+  white-space: pre-line;
+  color: var(--slate-600);
+}
+
+/* Formulario de edición inline dentro de una tarjeta de gestión */
+.event-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 
 /* ==========================================================================
@@ -1406,4 +1433,109 @@
   color: var(--rose-600);
   cursor: pointer;
   display: flex;
+}
+
+/* ==========================================================================
+   Confirm Dialog (diálogo de confirmación reutilizable)
+   ========================================================================== */
+.confirm-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  text-align: center;
+  background-color: #ffffff;
+  border: 1px solid var(--brand-100);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+}
+
+.confirm-dialog-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--brand-50);
+  color: var(--brand-600);
+}
+
+.confirm-dialog-icon-danger {
+  background-color: var(--rose-50);
+  color: var(--rose-600);
+}
+
+.confirm-dialog-title {
+  margin: 0.25rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--slate-900);
+}
+
+.confirm-dialog-message {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--slate-600);
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--slate-100);
+}
+
+/* Acción destructiva reservada para eliminar (Guía de Microcopy) */
+.btn-danger-pro {
+  background-color: var(--rose-600);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 750;
+  padding: 0.6rem 1.15rem;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-danger-pro:hover:not(:disabled) {
+  background-color: var(--rose-500);
+}
+
+.btn-danger-pro:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.confirm-dialog button:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.confirm-dialog .btn-danger-pro:focus-visible {
+  outline-color: var(--rose-500);
 }
