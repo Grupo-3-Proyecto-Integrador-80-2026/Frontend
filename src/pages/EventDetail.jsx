@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   IconMapPin,
   IconCalendar,
@@ -11,6 +11,7 @@ import {
   IconAlertTriangle,
   IconX,
 } from '../components/Icons'
+import ConfirmDialog from '../components/ConfirmDialog'
 import {
   formatDateFromISO,
   formatDateToISO,
@@ -111,6 +112,12 @@ export default function EventDetail() {
   // cada uno tiene su propio feedback y su propio isSubmitting,
   // de modo que editar una gestión no bloquea a otra ni al formulario del evento.
   const [editingSubtasks, setEditingSubtasks] = useState({})
+
+  // Confirmación de eliminación (evento o gestión) y estado del DELETE en curso
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const navigate = useNavigate()
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -583,6 +590,104 @@ export default function EventDetail() {
     }
   }
 
+  /* =================== Eliminación (DELETE) =================== */
+
+  // Abre el diálogo de confirmación para eliminar el evento completo
+  const handleRequestDeleteEvent = () => {
+    setFeedback(EMPTY_FEEDBACK)
+    setEventFeedback(EMPTY_FEEDBACK)
+    setConfirmDelete({ type: 'event', id, name: event.name })
+  }
+
+  // Abre el diálogo de confirmación para eliminar una gestión individual
+  const handleRequestDeleteSubtask = (task) => {
+    setFeedback(EMPTY_FEEDBACK)
+    setConfirmDelete({ type: 'subtask', id: task.id, name: task.name })
+  }
+
+  // Mientras el DELETE está en curso el diálogo no se puede cerrar
+  const handleCancelDelete = () => {
+    if (isDeleting) return
+    setConfirmDelete(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (isDeleting || !confirmDelete) return
+
+    setIsDeleting(true)
+
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+
+    try {
+      if (confirmDelete.type === 'event') {
+        // El backend elimina en cascada las gestiones asociadas al evento
+        const response = await fetch(`${baseUrl}/api/events/${confirmDelete.id}/`, {
+          method: 'DELETE',
+        })
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+            (data.details ? JSON.stringify(data.details) : 'No se pudo eliminar el evento.')
+          )
+        }
+
+        // El evento ya no existe: la vista de detalle deja de ser válida
+        setConfirmDelete(null)
+        navigate('/')
+        return
+      }
+
+      const response = await fetch(`${baseUrl}/api/subtasks/${confirmDelete.id}/`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          (data.details ? JSON.stringify(data.details) : 'No se pudo eliminar la gestión.')
+        )
+      }
+
+      // Quitar la gestión del estado local, sin volver a pedir el evento completo;
+      // el contador "X gestiones" se actualiza solo porque deriva de subtasks.length
+      setEvent((prev) => ({
+        ...prev,
+        subtasks: (Array.isArray(prev.subtasks) ? prev.subtasks : []).filter(
+          (subtask) => subtask.id !== confirmDelete.id
+        ),
+      }))
+
+      setConfirmDelete(null)
+      setFeedback({
+        type: 'success',
+        message: data.message || `Gestión "${confirmDelete.name}" eliminada correctamente.`,
+        details: null,
+      })
+    } catch (err) {
+      // En un fallo de conexión no se oculta nada: se informa el error al usuario
+      console.error(err)
+      const message =
+        err instanceof TypeError || !err.message
+          ? 'Error de conexión con el servidor. Inténtalo nuevamente.'
+          : err.message
+
+      setConfirmDelete(null)
+
+      if (confirmDelete.type === 'event') {
+        setEventFeedback({ type: 'error', message, details: null })
+      } else {
+        setFeedback({ type: 'error', message, details: null })
+      }
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="page-container">
@@ -608,7 +713,7 @@ export default function EventDetail() {
 
   return (
     <div className="create-page-container">
-      {/* Feedback de la edición del evento (éxito tras guardar) */}
+      {/* Feedback de la edición/eliminación del evento (éxito o error) */}
       {eventFeedback.type === 'success' && (
         <div className="banner-alert banner-success" role="alert">
           <div className="banner-icon-side">
@@ -632,6 +737,26 @@ export default function EventDetail() {
               Cerrar aviso
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Error de una operación sobre el evento fuera del formulario (p. ej. DELETE fallido) */}
+      {eventFeedback.type === 'error' && !isEditingEvent && (
+        <div className="banner-alert banner-error" role="alert">
+          <div className="banner-icon-side">
+            <IconAlertTriangle size={20} className="icon-rose" />
+          </div>
+          <div className="banner-content">
+            <strong>Atención:</strong> {eventFeedback.message}
+          </div>
+          <button
+            type="button"
+            className="btn-close-alert"
+            aria-label="Cerrar alerta"
+            onClick={() => setEventFeedback(EMPTY_FEEDBACK)}
+          >
+            <IconX size={16} />
+          </button>
         </div>
       )}
 
@@ -902,6 +1027,13 @@ export default function EventDetail() {
               <Link to="/" className="btn-sec-pro">
                 Volver al Listado
               </Link>
+              <button
+                type="button"
+                className="btn-danger-pro"
+                onClick={handleRequestDeleteEvent}
+              >
+                Eliminar Evento
+              </button>
               <button type="button" className="btn-primary-action" onClick={handleStartEditEvent}>
                 Editar Evento
               </button>
@@ -1466,13 +1598,22 @@ export default function EventDetail() {
                   {task.note && <p className="event-client">Nota: {task.note}</p>}
 
                   <div className="event-card-footer">
-                    <button
-                      type="button"
-                      className="btn-manage-event"
-                      onClick={() => handleStartEditSubtask(task)}
-                    >
-                      Editar
-                    </button>
+                    <div className="event-card-actions">
+                      <button
+                        type="button"
+                        className="btn-manage-event"
+                        onClick={() => handleStartEditSubtask(task)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-danger-pro"
+                        onClick={() => handleRequestDeleteSubtask(task)}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
@@ -1480,6 +1621,23 @@ export default function EventDetail() {
           </div>
         )}
       </section>
+
+      {/* Confirmación de eliminación de evento o gestión */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        isDangerous
+        title={confirmDelete?.type === 'event' ? 'Eliminar evento' : 'Eliminar gestión'}
+        message={
+          confirmDelete?.type === 'event'
+            ? `¿Estás seguro de que deseas eliminar el evento "${confirmDelete.name}"? Esta acción eliminará también todas sus gestiones asociadas y no se puede deshacer.`
+            : `¿Eliminar la gestión '${confirmDelete?.name ?? ''}'? Esta acción no se puede deshacer.`
+        }
+        confirmLabel={isDeleting ? 'Eliminando...' : 'Eliminar'}
+        cancelLabel="Cancelar"
+        confirmDisabled={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }
