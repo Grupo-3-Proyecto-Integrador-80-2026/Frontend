@@ -20,7 +20,7 @@ export const EVENT_TYPES = [
  */
 export const EVENT_STATUSES = [
   { value: 'planning', label: 'Planificación' },
-  { value: 'in_progress', label: 'En Producción' },
+  { value: 'in_progress', label: 'En curso' },
   { value: 'finished', label: 'Finalizado' },
 ]
 
@@ -49,62 +49,27 @@ export const TASK_PRIORITIES = [
   { value: 'high', label: 'Alta' },
 ]
 
+/**
+ * Estados de una gestión, con las mismas etiquetas que usa el backend.
+ * @type {Array<{value: string, label: string}>}
+ */
+export const TASK_STATUSES = [
+  { value: 'pending', label: 'Pendiente' },
+  { value: 'in_progress', label: 'En progreso' },
+  { value: 'done', label: 'Hecho' },
+  { value: 'postponed', label: 'Pospuesto' },
+]
+
 const ALLOWED_TASK_TYPES = TASK_TYPES.map((option) => option.value)
 
 /**
- * Formatea automáticamente el texto de fecha a medida que el usuario escribe,
- * asegurando la estructura DD/MM/AAAA.
- * @param {string} value - Texto ingresado.
- * @returns {string} - Texto formateado con separadores de barra.
+ * Traduce el valor crudo del backend a su etiqueta en español.
+ * @param {Array<{value: string, label: string}>} options
+ * @param {string} value
+ * @returns {string}
  */
-export function autoFormatDateInput(value) {
-  if (!value) return ''
-
-  // Permitir sólo dígitos y barras
-  const clean = value.replace(/[^\d/]/g, '')
-  const digitsOnly = clean.replace(/\//g, '').slice(0, 8)
-
-  if (digitsOnly.length === 0) {
-    return ''
-  }
-
-  if (digitsOnly.length <= 2) {
-    return clean.endsWith('/') && digitsOnly.length === 2 ? `${digitsOnly}/` : digitsOnly
-  }
-
-  if (digitsOnly.length <= 4) {
-    const day = digitsOnly.slice(0, 2)
-    const month = digitsOnly.slice(2)
-    return clean.endsWith('/') && digitsOnly.length === 4 ? `${day}/${month}/` : `${day}/${month}`
-  }
-
-  const day = digitsOnly.slice(0, 2)
-  const month = digitsOnly.slice(2, 4)
-  const year = digitsOnly.slice(4, 8)
-  return `${day}/${month}/${year}`
-}
-
-/**
- * Convierte una fecha de formato DD/MM/AAAA a formato ISO AAAA-MM-DD (para el backend).
- * @param {string} ddmmyyyy - Fecha en formato DD/MM/AAAA.
- * @returns {string} - Fecha en formato AAAA-MM-DD.
- */
-export function formatDateToISO(ddmmyyyy) {
-  if (!ddmmyyyy) return ''
-  const trimmed = ddmmyyyy.trim()
-
-  // Si ya viene en formato ISO AAAA-MM-DD, retornarlo directamente
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed
-  }
-
-  const parts = trimmed.split('/')
-  if (parts.length === 3) {
-    const [day, month, year] = parts
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-  }
-
-  return trimmed
+export function getOptionLabel(options, value) {
+  return options.find((option) => option.value === value)?.label || 'No especificado'
 }
 
 /**
@@ -122,6 +87,63 @@ export function formatDateFromISO(isodate) {
   }
 
   return trimmed
+}
+
+const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/**
+ * Convierte una fecha ISO AAAA-MM-DD a un texto corto como "28 oct".
+ * @param {string} isodate - Fecha en formato AAAA-MM-DD.
+ * @returns {string}
+ */
+export function formatDateShort(isodate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isodate || '')
+  if (!match) return isodate || ''
+  return `${Number(match[3])} ${MONTHS_SHORT[Number(match[2]) - 1]}`
+}
+
+/**
+ * Días de calendario entre dos fechas ISO (b - a), sin depender de la zona horaria.
+ * @param {string} a - AAAA-MM-DD
+ * @param {string} b - AAAA-MM-DD
+ * @returns {number}
+ */
+export function daysBetween(a, b) {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
+}
+
+/**
+ * Valida una fecha AAAA-MM-DD (la que entrega <input type="date">):
+ * estructura, rango de años y existencia real del día en el calendario.
+ * @param {string} strValue
+ * @returns {string|null} - Mensaje de error o null si es válida.
+ */
+function validateDateString(strValue) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(strValue)
+
+  if (!match) {
+    return 'Elige una fecha válida en el calendario.'
+  }
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+
+  if (year < 1900 || year > 2100) {
+    return 'El año debe estar entre 1900 y 2100.'
+  }
+
+  // Validar existencia real del día en el mes y año (bisiestos, meses de 30/31 días)
+  const dateObj = new Date(year, month - 1, day)
+  if (
+    dateObj.getFullYear() !== year ||
+    dateObj.getMonth() !== month - 1 ||
+    dateObj.getDate() !== day
+  ) {
+    return 'La fecha ingresada no corresponde a un día válido en el calendario.'
+  }
+
+  return null
 }
 
 /**
@@ -151,41 +173,7 @@ export function validateEventField(fieldName, value) {
       if (!strValue) {
         return 'La fecha del evento es obligatoria.'
       }
-
-      // Validar formato DD/MM/AAAA
-      const dateRegex = /^(\d{2})\/(\d{2})\/(\d{4})$/
-      const match = strValue.match(dateRegex)
-
-      if (!match) {
-        return 'El formato de fecha debe ser DD/MM/AAAA (ej. 28/10/2026).'
-      }
-
-      const day = Number(match[1])
-      const month = Number(match[2])
-      const year = Number(match[3])
-
-      // Validar rangos numéricos
-      if (day < 1 || day > 31) {
-        return 'El día debe estar entre 01 y 31.'
-      }
-      if (month < 1 || month > 12) {
-        return 'El mes debe estar entre 01 y 12.'
-      }
-      if (year < 1900 || year > 2100) {
-        return 'El año debe estar entre 1900 y 2100.'
-      }
-
-      // Validar existencia real del día en el mes y año (bisiestos, meses de 30/31 días)
-      const dateObj = new Date(year, month - 1, day)
-      if (
-        dateObj.getFullYear() !== year ||
-        dateObj.getMonth() !== month - 1 ||
-        dateObj.getDate() !== day
-      ) {
-        return 'La fecha ingresada no corresponde a un día válido en el calendario.'
-      }
-
-      return null
+      return validateDateString(strValue)
     }
 
     case 'event_type': {
@@ -254,49 +242,6 @@ export function validateEventForm(formData) {
 }
 
 /**
- * Valida una fecha en formato DD/MM/AAAA: estructura, rangos numéricos y
- * existencia real del día en el calendario (bisiestos, meses de 30/31 días).
- * @param {string} strValue - Fecha en formato DD/MM/AAAA.
- * @returns {string|null} - Mensaje de error o null si es válida.
- */
-function validateDateString(strValue) {
-  // Validar formato DD/MM/AAAA
-  const dateRegex = /^(\d{2})\/(\d{2})\/(\d{4})$/
-  const match = strValue.match(dateRegex)
-
-  if (!match) {
-    return 'El formato de fecha debe ser DD/MM/AAAA (ej. 28/10/2026).'
-  }
-
-  const day = Number(match[1])
-  const month = Number(match[2])
-  const year = Number(match[3])
-
-  // Validar rangos numéricos
-  if (day < 1 || day > 31) {
-    return 'El día debe estar entre 01 y 31.'
-  }
-  if (month < 1 || month > 12) {
-    return 'El mes debe estar entre 01 y 12.'
-  }
-  if (year < 1900 || year > 2100) {
-    return 'El año debe estar entre 1900 y 2100.'
-  }
-
-  // Validar existencia real del día en el mes y año (bisiestos, meses de 30/31 días)
-  const dateObj = new Date(year, month - 1, day)
-  if (
-    dateObj.getFullYear() !== year ||
-    dateObj.getMonth() !== month - 1 ||
-    dateObj.getDate() !== day
-  ) {
-    return 'La fecha ingresada no corresponde a un día válido en el calendario.'
-  }
-
-  return null
-}
-
-/**
  * Valida un campo individual del formulario de creación de gestiones
  * (subtareas logísticas) según las reglas de negocio.
  * @param {string} fieldName - Nombre del campo.
@@ -329,7 +274,7 @@ export function validateSubtaskField(fieldName, value) {
 
     case 'scheduled_date': {
       if (!strValue) {
-        return 'La fecha programada es obligatoria.'
+        return 'La fecha objetivo es obligatoria.'
       }
       return validateDateString(strValue)
     }

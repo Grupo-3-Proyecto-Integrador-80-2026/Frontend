@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Brand Sky Palette */
-  --brand-50: #f0f9ff;
-  --brand-100: #e0f2fe;
-  --brand-200: #bae6fd;
-  --brand-300: #7dd3fc;
-  --brand-400: #38bdf8;
-  --brand-500: #0ea5e9;
-  --brand-600: #0284c7;
-  --brand-700: #0369a1;
-  --brand-800: #075985;
-  --brand-900: #0c4a6e;
+  /* Brand Floz Palette (azul sobrio, sin tonos neón) */
+  --brand-50: #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-200: #bfdbfe;
+  --brand-300: #93c5fd;
+  --brand-400: #60a5fa;
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+  --brand-800: #1e40af;
+  --brand-900: #1e3a8a;
 
   /* Slate Neutrals */
   --slate-50: #f8fafc;
@@ -41,6 +41,17 @@
   --amber-50: #fffbeb;
   --amber-200: #fde68a;
 
+  /* Jerarquía de urgencia de la vista "Hoy" (tonos oscuros, contraste >= 4.5:1 sobre blanco) */
+  --urgency-overdue: #b91c1c;
+  --urgency-overdue-bg: #fef2f2;
+  --urgency-today: #a16207; /* amarillo mostaza: 4,92:1 con texto blanco */
+  --urgency-today-bg: #fefce8;
+  --urgency-upcoming: #1d4ed8;
+  --urgency-upcoming-bg: #eff6ff;
+
+  /* Foco visible común a toda la app */
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.35);
+
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -63,4 +74,10 @@ html, body {
 #root {
   height: 100%;
   width: 100%;
+}
+
+/* Foco visible para navegación por teclado en todos los controles */
+:focus-visible {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
 }
