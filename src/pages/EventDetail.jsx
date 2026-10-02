@@ -221,6 +221,10 @@ export default function EventDetail() {
       setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
       setSubtaskErrors({})
       setSubtaskTouched({})
+
+      // Cerrar el formulario
+      setShowSubtaskForm(false)
+      
     } catch (err) {
       // En un fallo de conexión no se limpia el formulario: lo escrito se conserva
       console.error(err)
