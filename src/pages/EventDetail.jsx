@@ -10,12 +10,14 @@ import {
   IconCheckCircle,
   IconAlertTriangle,
   IconX,
+  IconRefresh,
 } from '../components/Icons'
 import ConfirmDialog from '../components/ConfirmDialog'
+import StatusMessage from '../components/StatusMessage'
+import { apiFetch } from '../api/client'
 import {
   formatDateFromISO,
-  formatDateToISO,
-  autoFormatDateInput,
+  getOptionLabel,
   validateEventField,
   validateEventForm,
   validateSubtaskField,
@@ -24,14 +26,8 @@ import {
   EVENT_STATUSES,
   TASK_TYPES,
   TASK_PRIORITIES,
+  TASK_STATUSES,
 } from '../utils/validators'
-
-const SUBTASK_STATUS = [
-  { value: 'pending', label: 'Pendiente' },
-  { value: 'in_progress', label: 'En curso' },
-  { value: 'done', label: 'Completada' },
-  { value: 'postponed', label: 'Aplazada' },
-]
 
 const INITIAL_EVENT_FORM_STATE = {
   name: '',
@@ -54,19 +50,14 @@ const INITIAL_SUBTASK_FORM_STATE = {
 
 const EMPTY_FEEDBACK = { type: null, message: '', details: null }
 
-// Traduce el valor crudo del backend a su etiqueta en español
-function getOptionLabel(options, value) {
-  return options.find((option) => option.value === value)?.label || 'No especificado'
-}
-
-// Precarga el formulario de edición del evento con los valores actuales (fecha en DD/MM/AAAA)
+// Precarga el formulario de edición del evento con los valores actuales
 function buildEventFormValues(eventData) {
   return {
     name: eventData.name || '',
     event_type: eventData.event_type || '',
     contact: eventData.contact || '',
     location: eventData.location || '',
-    event_date: eventData.event_date ? formatDateFromISO(eventData.event_date) : '',
+    event_date: eventData.event_date || '',
     status: eventData.status || 'planning',
     description: eventData.description || '',
   }
@@ -78,7 +69,7 @@ function buildSubtaskFormValues(task) {
   return {
     name: task.name || '',
     type: task.type || '',
-    scheduled_date: task.scheduled_date ? formatDateFromISO(task.scheduled_date) : '',
+    scheduled_date: task.scheduled_date || '',
     estimated_hours: hours != null && hours !== '' ? String(hours) : '',
     priority: task.priority || 'medium',
     note: task.note || '',
@@ -89,8 +80,10 @@ function buildSubtaskFormValues(task) {
 export default function EventDetail() {
   const { id } = useParams()
   const [event, setEvent] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  // Cada intento de carga tiene una clave; "cargando" = la respuesta de ese intento aún no llega
+  const [attempt, setAttempt] = useState(0)
+  const loadKey = `${id}|${attempt}`
+  const [loadResult, setLoadResult] = useState({ key: null, error: null })
 
   // Estado controlado del formulario de creación de gestiones
   const [subtaskForm, setSubtaskForm] = useState(INITIAL_SUBTASK_FORM_STATE)
@@ -120,40 +113,38 @@ export default function EventDetail() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const fetchEvent = async () => {
-      try {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
-        const response = await fetch(`${baseUrl}/api/events/${id}/`)
-        if (!response.ok) {
-          throw new Error('No se pudo cargar el evento o no existe.')
-        }
-        const data = await response.json()
+    const controller = new AbortController()
+    apiFetch(`/api/events/${id}/`, { signal: controller.signal })
+      .then((data) => {
         setEvent(data)
-      } catch (err) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
-    }
+        setLoadResult({ key: loadKey, error: null })
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        setLoadResult({
+          key: loadKey,
+          error: err.status === 404 ? 'Este evento no existe o fue eliminado.' : err.message,
+        })
+      })
+    return () => controller.abort()
+  }, [id, loadKey])
 
-    fetchEvent()
-  }, [id])
+  const loading = loadResult.key !== loadKey
+  const error = loadResult.error
+  const fetchEvent = () => setAttempt((n) => n + 1)
 
-  // Manejador de cambios con formateo DD/MM/AAAA y re-validación inmediata
+  // Manejador de cambios con re-validación inmediata
   const handleChangeSubtask = (e) => {
     const { name, value } = e.target
 
-    // Auto-formatear fecha a DD/MM/AAAA mientras el usuario escribe
-    const finalValue = name === 'scheduled_date' ? autoFormatDateInput(value) : value
-
     setSubtaskForm((prev) => ({
       ...prev,
-      [name]: finalValue,
+      [name]: value,
     }))
 
     // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
     if (subtaskTouched[name] || subtaskErrors[name]) {
-      const fieldError = validateSubtaskField(name, finalValue)
+      const fieldError = validateSubtaskField(name, value)
       setSubtaskErrors((prev) => ({
         ...prev,
         [name]: fieldError,
@@ -202,37 +193,17 @@ export default function EventDetail() {
 
     setIsSubmitting(true)
 
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
-
-    // Convertir la fecha DD/MM/AAAA al formato ISO AAAA-MM-DD esperado por Django REST Framework
-    const isoScheduledDate = formatDateToISO(subtaskForm.scheduled_date)
-
     const payload = {
       name: subtaskForm.name.trim(),
       type: subtaskForm.type,
-      scheduled_date: isoScheduledDate,
+      scheduled_date: subtaskForm.scheduled_date,
       estimated_hours: Number(subtaskForm.estimated_hours),
       priority: subtaskForm.priority,
       note: subtaskForm.note.trim(),
     }
 
     try {
-      const response = await fetch(`${baseUrl}/api/events/${id}/subtasks/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-          (data.details ? JSON.stringify(data.details) : 'Error al guardar la gestión en el servidor.')
-        )
-      }
+      const data = await apiFetch(`/api/events/${id}/subtasks/`, { method: 'POST', body: payload })
 
       // Agregar la subtarea creada al estado local, sin volver a pedir el evento al backend
       setEvent((prev) => ({
@@ -256,9 +227,7 @@ export default function EventDetail() {
       setFeedback({
         type: 'error',
         message:
-          err instanceof TypeError || !err.message
-            ? 'Error de conexión con el servidor. Inténtalo nuevamente.'
-            : err.message,
+          err.message,
       })
     } finally {
       setIsSubmitting(false)
@@ -295,17 +264,14 @@ export default function EventDetail() {
   const handleChangeEvent = (e) => {
     const { name, value } = e.target
 
-    // Auto-formatear fecha a DD/MM/AAAA mientras el usuario escribe
-    const finalValue = name === 'event_date' ? autoFormatDateInput(value) : value
-
     setEventForm((prev) => ({
       ...prev,
-      [name]: finalValue,
+      [name]: value,
     }))
 
     // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
     if (eventTouched[name] || eventErrors[name]) {
-      const fieldError = validateEventField(name, finalValue)
+      const fieldError = validateEventField(name, value)
       setEventErrors((prev) => ({
         ...prev,
         [name]: fieldError,
@@ -352,36 +318,18 @@ export default function EventDetail() {
 
     setIsEventSubmitting(true)
 
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
-
-    // Convertir la fecha DD/MM/AAAA al formato ISO AAAA-MM-DD esperado por Django REST Framework
     const payload = {
       name: eventForm.name.trim(),
       event_type: eventForm.event_type,
       contact: eventForm.contact.trim(),
       location: eventForm.location.trim(),
-      event_date: formatDateToISO(eventForm.event_date),
+      event_date: eventForm.event_date,
       status: eventForm.status,
       description: eventForm.description.trim(),
     }
 
     try {
-      const response = await fetch(`${baseUrl}/api/events/${id}/`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-          (data.details ? JSON.stringify(data.details) : 'Error al guardar el evento en el servidor.')
-        )
-      }
+      const data = await apiFetch(`/api/events/${id}/`, { method: 'PATCH', body: payload })
 
       // El PATCH devuelve el evento completo (incluye subtasks): se reemplaza
       // el estado local sin volver a hacer GET y se regresa a la vista de solo lectura
@@ -400,9 +348,7 @@ export default function EventDetail() {
       setEventFeedback({
         type: 'error',
         message:
-          err instanceof TypeError || !err.message
-            ? 'Error de conexión con el servidor. Inténtalo nuevamente.'
-            : err.message,
+          err.message,
       })
     } finally {
       setIsEventSubmitting(false)
@@ -442,23 +388,20 @@ export default function EventDetail() {
   const handleChangeSubtaskEdit = (subtaskId, e) => {
     const { name, value } = e.target
 
-    // Auto-formatear fecha a DD/MM/AAAA mientras el usuario escribe
-    const finalValue = name === 'scheduled_date' ? autoFormatDateInput(value) : value
-
     setEditingSubtasks((prev) => {
       const entry = prev[subtaskId]
       if (!entry) return prev
 
       const nextEntry = {
         ...entry,
-        form: { ...entry.form, [name]: finalValue },
+        form: { ...entry.form, [name]: value },
       }
 
       // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
       if (entry.touched[name] || entry.errors[name]) {
         nextEntry.errors = {
           ...entry.errors,
-          [name]: validateSubtaskField(name, finalValue),
+          [name]: validateSubtaskField(name, value),
         }
       }
 
@@ -525,13 +468,10 @@ export default function EventDetail() {
 
     updateEditingSubtask(subtaskId, { isSubmitting: true })
 
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
-
-    // Convertir la fecha DD/MM/AAAA al formato ISO AAAA-MM-DD esperado por Django REST Framework
     const payload = {
       name: entry.form.name.trim(),
       type: entry.form.type,
-      scheduled_date: formatDateToISO(entry.form.scheduled_date),
+      scheduled_date: entry.form.scheduled_date,
       estimated_hours: Number(entry.form.estimated_hours),
       priority: entry.form.priority,
       note: entry.form.note.trim(),
@@ -539,22 +479,7 @@ export default function EventDetail() {
     }
 
     try {
-      const response = await fetch(`${baseUrl}/api/subtasks/${subtaskId}/`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-          (data.details ? JSON.stringify(data.details) : 'Error al guardar la gestión en el servidor.')
-        )
-      }
+      const data = await apiFetch(`/api/subtasks/${subtaskId}/`, { method: 'PATCH', body: payload })
 
       // Reemplaza solo esa gestión dentro de event.subtasks buscándola por id,
       // sin volver a pedir el evento completo al backend
@@ -579,9 +504,7 @@ export default function EventDetail() {
         feedback: {
           type: 'error',
           message:
-            err instanceof TypeError || !err.message
-              ? 'Error de conexión con el servidor. Inténtalo nuevamente.'
-              : err.message,
+            err.message,
           details: null,
         },
       })
@@ -616,42 +539,18 @@ export default function EventDetail() {
 
     setIsDeleting(true)
 
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
-
     try {
       if (confirmDelete.type === 'event') {
         // El backend elimina en cascada las gestiones asociadas al evento
-        const response = await fetch(`${baseUrl}/api/events/${confirmDelete.id}/`, {
-          method: 'DELETE',
-        })
-
-        const data = await response.json().catch(() => ({}))
-
-        if (!response.ok) {
-          throw new Error(
-            data.error ||
-            (data.details ? JSON.stringify(data.details) : 'No se pudo eliminar el evento.')
-          )
-        }
+        await apiFetch(`/api/events/${confirmDelete.id}/`, { method: 'DELETE' })
 
         // El evento ya no existe: la vista de detalle deja de ser válida
         setConfirmDelete(null)
-        navigate('/')
+        navigate('/eventos')
         return
       }
 
-      const response = await fetch(`${baseUrl}/api/subtasks/${confirmDelete.id}/`, {
-        method: 'DELETE',
-      })
-
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-          (data.details ? JSON.stringify(data.details) : 'No se pudo eliminar la gestión.')
-        )
-      }
+      await apiFetch(`/api/subtasks/${confirmDelete.id}/`, { method: 'DELETE' })
 
       // Quitar la gestión del estado local, sin volver a pedir el evento completo;
       // el contador "X gestiones" se actualiza solo porque deriva de subtasks.length
@@ -665,16 +564,13 @@ export default function EventDetail() {
       setConfirmDelete(null)
       setFeedback({
         type: 'success',
-        message: data.message || `Gestión "${confirmDelete.name}" eliminada correctamente.`,
+        message: `Gestión "${confirmDelete.name}" eliminada.`,
         details: null,
       })
     } catch (err) {
       // En un fallo de conexión no se oculta nada: se informa el error al usuario
       console.error(err)
-      const message =
-        err instanceof TypeError || !err.message
-          ? 'Error de conexión con el servidor. Inténtalo nuevamente.'
-          : err.message
+      const message = err.message
 
       setConfirmDelete(null)
 
@@ -689,23 +585,25 @@ export default function EventDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="page-container">
-        <p>Cargando detalles del evento...</p>
-      </div>
-    )
+    return <StatusMessage variant="loading" title="Cargando el evento..." />
   }
 
   if (error || !event) {
     return (
-      <div className="page-container">
-        <div className="banner-alert banner-error">
-          <strong>Error:</strong> {error}
-        </div>
-        <Link to="/" className="btn-sec-pro" style={{ marginTop: '1rem', display: 'inline-block' }}>
-          Volver al Inicio
+      <StatusMessage
+        variant="error"
+        icon={<IconAlertTriangle size={28} />}
+        title="No pudimos mostrar este evento"
+        description={error}
+      >
+        <Link to="/eventos" className="btn-sec-pro">
+          Ver mis eventos
         </Link>
-      </div>
+        <button type="button" className="btn-primary-action" onClick={fetchEvent}>
+          <IconRefresh size={16} />
+          <span>Reintentar</span>
+        </button>
+      </StatusMessage>
     )
   }
 
@@ -763,7 +661,7 @@ export default function EventDetail() {
       <div className="form-card-pro">
         <div className="form-card-header">
           <div>
-            <h2 className="form-heading">{isEditingEvent ? 'Editar Evento' : event.name}</h2>
+            <h2 className="form-heading">{isEditingEvent ? 'Editar evento' : event.name}</h2>
             {isEditingEvent ? (
               <p className="form-subheading">Actualiza la información principal de la ficha</p>
             ) : (
@@ -801,7 +699,7 @@ export default function EventDetail() {
             <div className="field-group">
               <div className="field-label-row">
                 <label htmlFor="event-name" className="field-label">
-                  Nombre del Evento <span className="req-star">*</span>
+                  Nombre del evento <span className="req-star">*</span>
                 </label>
                 <span className="char-counter">
                   {eventForm.name.length}/200
@@ -832,7 +730,7 @@ export default function EventDetail() {
             <div className="field-row-2">
               <div className="field-group">
                 <label htmlFor="event-type" className="field-label">
-                  Tipo de Evento <span className="req-star">*</span>
+                  Tipo de evento <span className="req-star">*</span>
                 </label>
                 <select
                   id="event-type"
@@ -859,7 +757,7 @@ export default function EventDetail() {
 
               <div className="field-group">
                 <label htmlFor="event-status" className="field-label">
-                  Estado del Evento <span className="req-star">*</span>
+                  Estado del evento <span className="req-star">*</span>
                 </label>
                 <select
                   id="event-status"
@@ -882,29 +780,24 @@ export default function EventDetail() {
               </div>
             </div>
 
-            {/* Fila: Fecha Prevista (DD/MM/AAAA) y Contacto */}
+            {/* Fila: Fecha del evento y Contacto */}
             <div className="field-row-2">
               <div className="field-group">
                 <label htmlFor="event-date" className="field-label">
-                  Fecha Prevista (DD/MM/AAAA) <span className="req-star">*</span>
+                  Fecha del evento <span className="req-star">*</span>
                 </label>
                 <input
                   id="event-date"
-                  type="text"
+                  type="date"
                   name="event_date"
                   value={eventForm.event_date}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  placeholder="DD/MM/AAAA (ej. 28/10/2026)"
-                  maxLength={10}
                   className={`field-input ${eventTouched.event_date && eventErrors.event_date ? 'field-input-error' : ''}`}
                   required
                   aria-invalid={eventTouched.event_date && !!eventErrors.event_date}
-                  aria-describedby={eventErrors.event_date ? 'event-date-error' : 'event-date-hint'}
+                  aria-describedby={eventErrors.event_date ? 'event-date-error' : undefined}
                 />
-                <small id="event-date-hint" className="field-hint">
-                  Formato: <strong>DD/MM/AAAA</strong> (Día/Mes/Año)
-                </small>
                 {eventTouched.event_date && eventErrors.event_date && (
                   <span id="event-date-error" className="field-error-text">
                     {eventErrors.event_date}
@@ -914,7 +807,7 @@ export default function EventDetail() {
 
               <div className="field-group">
                 <label htmlFor="event-contact" className="field-label">
-                  Cliente / Contacto
+                  Cliente / contacto
                 </label>
                 <input
                   id="event-contact"
@@ -933,10 +826,10 @@ export default function EventDetail() {
               </div>
             </div>
 
-            {/* Lugar / Recinto */}
+            {/* Lugar */}
             <div className="field-group">
               <label htmlFor="event-location" className="field-label">
-                Lugar / Recinto
+                Lugar
               </label>
               <input
                 id="event-location"
@@ -958,7 +851,7 @@ export default function EventDetail() {
             <div className="field-group">
               <div className="field-label-row">
                 <label htmlFor="event-description" className="field-label">
-                  Descripción o Alcance Técnico
+                  Descripción o notas
                 </label>
                 <span className="char-counter">
                   {eventForm.description.length}/2000
@@ -995,7 +888,7 @@ export default function EventDetail() {
                 className="btn-submit-pro"
                 disabled={isEventSubmitting}
               >
-                {isEventSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                {isEventSubmitting ? 'Guardando...' : 'Guardar cambios'}
               </button>
             </div>
           </form>
@@ -1024,18 +917,18 @@ export default function EventDetail() {
             </div>
 
             <div className="form-actions-row">
-              <Link to="/" className="btn-sec-pro">
-                Volver al Listado
+              <Link to="/eventos" className="btn-sec-pro">
+                Volver a eventos
               </Link>
               <button
                 type="button"
-                className="btn-danger-pro"
+                className="btn-danger-ghost"
                 onClick={handleRequestDeleteEvent}
               >
-                Eliminar Evento
+                Eliminar evento
               </button>
               <button type="button" className="btn-primary-action" onClick={handleStartEditEvent}>
-                Editar Evento
+                Editar evento
               </button>
             </div>
           </div>
@@ -1046,7 +939,7 @@ export default function EventDetail() {
       <section className="events-section">
         <div className="section-header-row">
           <div>
-            <h2 className="section-title">Gestiones del Evento</h2>
+            <h2 className="section-title">Gestiones del evento</h2>
             <p className="section-subtitle">Subtareas logísticas para mantener la producción en marcha</p>
           </div>
           <div className="header-right">
@@ -1061,7 +954,7 @@ export default function EventDetail() {
               aria-controls="subtask-form"
             >
               <IconPlus size={16} />
-              <span>{showSubtaskForm ? 'Cerrar Formulario' : 'Nueva Gestión'}</span>
+              <span>{showSubtaskForm ? 'Cerrar formulario' : 'Nueva gestión'}</span>
             </button>
           </div>
         </div>
@@ -1074,9 +967,9 @@ export default function EventDetail() {
             </div>
             <div className="banner-content">
               <strong>{feedback.message}</strong>
-              {feedback.details?.id && (
+              {feedback.details?.scheduled_date && (
                 <p className="banner-subtext">
-                  ID asignado: #{feedback.details.id} &bull; Tipo: {getOptionLabel(TASK_TYPES, feedback.details.type)} &bull; Fecha: {formatDateFromISO(feedback.details.scheduled_date)}
+                  Fecha objetivo: {formatDateFromISO(feedback.details.scheduled_date)}
                 </p>
               )}
             </div>
@@ -1119,7 +1012,7 @@ export default function EventDetail() {
                 <IconPlus size={18} />
               </div>
               <div>
-                <h2 className="form-heading">Nueva Gestión</h2>
+                <h2 className="form-heading">Nueva gestión</h2>
                 <p className="form-subheading">Registro de una subtarea logística del evento</p>
               </div>
             </div>
@@ -1135,7 +1028,7 @@ export default function EventDetail() {
               <div className="field-group">
                 <div className="field-label-row">
                   <label htmlFor="subtask-name" className="field-label">
-                    Nombre de la Gestión <span className="req-star">*</span>
+                    Nombre de la gestión <span className="req-star">*</span>
                   </label>
                   <span className="char-counter">
                     {subtaskForm.name.length}/200
@@ -1166,7 +1059,7 @@ export default function EventDetail() {
               <div className="field-row-2">
                 <div className="field-group">
                   <label htmlFor="subtask-type" className="field-label">
-                    Tipo de Gestión <span className="req-star">*</span>
+                    Tipo de gestión <span className="req-star">*</span>
                   </label>
                   <select
                     id="subtask-type"
@@ -1216,25 +1109,20 @@ export default function EventDetail() {
               <div className="field-row-2">
                 <div className="field-group">
                   <label htmlFor="subtask-date" className="field-label">
-                    Fecha Programada (DD/MM/AAAA) <span className="req-star">*</span>
+                    Fecha objetivo <span className="req-star">*</span>
                   </label>
                   <input
                     id="subtask-date"
-                    type="text"
+                    type="date"
                     name="scheduled_date"
                     value={subtaskForm.scheduled_date}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
-                    placeholder="DD/MM/AAAA (ej. 28/10/2026)"
-                    maxLength={10}
                     className={`field-input ${subtaskTouched.scheduled_date && subtaskErrors.scheduled_date ? 'field-input-error' : ''}`}
                     required
                     aria-invalid={subtaskTouched.scheduled_date && !!subtaskErrors.scheduled_date}
-                    aria-describedby={subtaskErrors.scheduled_date ? 'subtask-date-error' : 'subtask-date-hint'}
+                    aria-describedby={subtaskErrors.scheduled_date ? 'subtask-date-error' : undefined}
                   />
-                  <small id="subtask-date-hint" className="field-hint">
-                    Formato: <strong>DD/MM/AAAA</strong> (Día/Mes/Año)
-                  </small>
                   {subtaskTouched.scheduled_date && subtaskErrors.scheduled_date && (
                     <span id="subtask-date-error" className="field-error-text">
                       {subtaskErrors.scheduled_date}
@@ -1244,7 +1132,7 @@ export default function EventDetail() {
 
                 <div className="field-group">
                   <label htmlFor="subtask-hours" className="field-label">
-                    Horas Estimadas <span className="req-star">*</span>
+                    Horas estimadas <span className="req-star">*</span>
                   </label>
                   <input
                     id="subtask-hours"
@@ -1296,7 +1184,7 @@ export default function EventDetail() {
                   className="btn-sec-pro"
                   disabled={isSubmitting}
                 >
-                  Limpiar Formulario
+                  Limpiar formulario
                 </button>
                 <button
                   type="button"
@@ -1311,7 +1199,7 @@ export default function EventDetail() {
                   className="btn-submit-pro"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Guardando...' : 'Guardar Gestión'}
+                  {isSubmitting ? 'Guardando...' : 'Guardar gestión'}
                 </button>
               </div>
             </form>
@@ -1334,7 +1222,7 @@ export default function EventDetail() {
                 return (
                   <div key={task.id} className="event-card-item">
                     <div className="event-card-top">
-                      <span className="event-status-badge">Editando Gestión</span>
+                      <span className="event-status-badge">Editando gestión</span>
                       <span className="event-date">
                         <IconCalendar size={13} />
                         <span>
@@ -1372,7 +1260,7 @@ export default function EventDetail() {
                       <div className="field-group">
                         <div className="field-label-row">
                           <label htmlFor={`edit-subtask-${task.id}-name`} className="field-label">
-                            Nombre de la Gestión <span className="req-star">*</span>
+                            Nombre de la gestión <span className="req-star">*</span>
                           </label>
                           <span className="char-counter">
                             {editEntry.form.name.length}/200
@@ -1402,7 +1290,7 @@ export default function EventDetail() {
                       {/* Tipo de Gestión */}
                       <div className="field-group">
                         <label htmlFor={`edit-subtask-${task.id}-type`} className="field-label">
-                          Tipo de Gestión <span className="req-star">*</span>
+                          Tipo de gestión <span className="req-star">*</span>
                         </label>
                         <select
                           id={`edit-subtask-${task.id}-type`}
@@ -1430,17 +1318,15 @@ export default function EventDetail() {
                       {/* Fecha Programada */}
                       <div className="field-group">
                         <label htmlFor={`edit-subtask-${task.id}-date`} className="field-label">
-                          Fecha Programada (DD/MM/AAAA) <span className="req-star">*</span>
+                          Fecha objetivo <span className="req-star">*</span>
                         </label>
                         <input
                           id={`edit-subtask-${task.id}-date`}
-                          type="text"
+                          type="date"
                           name="scheduled_date"
                           value={editEntry.form.scheduled_date}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          placeholder="DD/MM/AAAA (ej. 28/10/2026)"
-                          maxLength={10}
                           className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
                           required
                           aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
@@ -1456,7 +1342,7 @@ export default function EventDetail() {
                       {/* Horas Estimadas */}
                       <div className="field-group">
                         <label htmlFor={`edit-subtask-${task.id}-hours`} className="field-label">
-                          Horas Estimadas <span className="req-star">*</span>
+                          Horas estimadas <span className="req-star">*</span>
                         </label>
                         <input
                           id={`edit-subtask-${task.id}-hours`}
@@ -1513,7 +1399,7 @@ export default function EventDetail() {
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
                           className="field-input field-select"
                         >
-                          {SUBTASK_STATUS.map((status) => (
+                          {TASK_STATUSES.map((status) => (
                             <option key={status.value} value={status.value}>
                               {status.label}
                             </option>
@@ -1553,7 +1439,7 @@ export default function EventDetail() {
                           className="btn-submit-pro"
                           disabled={editEntry.isSubmitting}
                         >
-                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar cambios'}
                         </button>
                       </div>
                     </form>
@@ -1566,7 +1452,7 @@ export default function EventDetail() {
                 <div key={task.id} className="event-card-item">
                   <div className="event-card-top">
                     <span className="event-status-badge">
-                      {getOptionLabel(SUBTASK_STATUS, task.status)}
+                      {getOptionLabel(TASK_STATUSES, task.status)}
                     </span>
                     <span className="event-date">
                       <IconCalendar size={13} />
@@ -1608,7 +1494,7 @@ export default function EventDetail() {
                       </button>
                       <button
                         type="button"
-                        className="btn-danger-pro"
+                        className="btn-danger-ghost"
                         onClick={() => handleRequestDeleteSubtask(task)}
                       >
                         Eliminar
