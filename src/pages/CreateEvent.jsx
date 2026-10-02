@@ -9,6 +9,7 @@ import {
   IconMapPin,
   IconX,
 } from '../components/Icons'
+import DateField from '../components/DateField'
 import { apiFetch } from '../api/client'
 import {
   validateEventField,
@@ -16,6 +17,7 @@ import {
   validateSubtaskField,
   validateSubtaskForm,
   formatDateFromISO,
+  todayISO,
   EVENT_TYPES,
   EVENT_STATUSES,
   TASK_TYPES,
@@ -103,6 +105,9 @@ export default function CreateEvent() {
     setPlanRows((prev) => prev.filter((row) => row.key !== key))
   }
 
+  // Las gestiones del plan deben quedar entre hoy y la fecha del evento
+  const planDateRange = { eventDate: formData.event_date || undefined }
+
   const updatePlanRow = (key, updater) => {
     setPlanRows((prev) => prev.map((row) => (row.key === key ? updater(row) : row)))
   }
@@ -114,7 +119,7 @@ export default function CreateEvent() {
       values: { ...row.values, [name]: value },
       errors:
         row.touched[name] || row.errors[name]
-          ? { ...row.errors, [name]: validateSubtaskField(name, value) }
+          ? { ...row.errors, [name]: validateSubtaskField(name, value, planDateRange) }
           : row.errors,
     }))
   }
@@ -124,7 +129,7 @@ export default function CreateEvent() {
     updatePlanRow(key, (row) => ({
       ...row,
       touched: { ...row.touched, [name]: true },
-      errors: { ...row.errors, [name]: validateSubtaskField(name, value) },
+      errors: { ...row.errors, [name]: validateSubtaskField(name, value, planDateRange) },
     }))
   }
 
@@ -149,7 +154,7 @@ export default function CreateEvent() {
     // Validar también cada gestión del plan
     let planHasErrors = false
     const validatedRows = planRows.map((row) => {
-      const rowErrors = validateSubtaskForm(row.values)
+      const rowErrors = validateSubtaskForm(row.values, planDateRange)
       if (Object.keys(rowErrors).length > 0) planHasErrors = true
       return {
         ...row,
@@ -400,11 +405,11 @@ export default function CreateEvent() {
                 <label htmlFor="event_date" className="field-label">
                   Fecha del evento <span className="req-star">*</span>
                 </label>
-                <input
+                <DateField
                   id="event_date"
-                  type="date"
                   name="event_date"
                   value={formData.event_date}
+                  min={todayISO()}
                   onChange={handleChange}
                   onBlur={handleBlur}
                   className={`field-input ${touched.event_date && errors.event_date ? 'field-input-error' : ''}`}
@@ -572,11 +577,12 @@ export default function CreateEvent() {
                       <label htmlFor={`plan-${row.key}-date`} className="field-label">
                         Fecha objetivo <span className="req-star">*</span>
                       </label>
-                      <input
+                      <DateField
                         id={`plan-${row.key}-date`}
-                        type="date"
                         name="scheduled_date"
                         value={row.values.scheduled_date}
+                        min={todayISO()}
+                        max={formData.event_date || undefined}
                         onChange={(e) => handlePlanChange(row.key, e)}
                         onBlur={(e) => handlePlanBlur(row.key, e)}
                         className={`field-input ${row.touched.scheduled_date && row.errors.scheduled_date ? 'field-input-error' : ''}`}

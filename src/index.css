@@ -76,6 +76,11 @@ button, input, select, textarea {
   font-family: inherit;
 }
 
+/* Con la app abierta, el scroll es solo el del panel de contenido */
+body:has(.app-layout) {
+  overflow: hidden;
+}
+
 #root {
   height: 100%;
   width: 100%;

@@ -25,6 +25,15 @@ export default function Events() {
   const { events, error } = result
   const loadEvents = () => setAttempt((n) => n + 1)
 
+  // Al volver a la pestaña se recargan los datos: pudieron cambiar en otra pestaña o dispositivo
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') setAttempt((n) => n + 1)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   if (isLoading) {
     return (
       <LoadingOverlay label="Cargando tus eventos...">
