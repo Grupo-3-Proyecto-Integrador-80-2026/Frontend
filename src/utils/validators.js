@@ -72,34 +72,30 @@ export function getOptionLabel(options, value) {
   return options.find((option) => option.value === value)?.label || 'No especificado'
 }
 
-/**
- * Convierte una fecha ISO AAAA-MM-DD a formato legible DD/MM/AAAA.
- * @param {string} isodate - Fecha en formato AAAA-MM-DD.
- * @returns {string} - Fecha en formato DD/MM/AAAA.
- */
-export function formatDateFromISO(isodate) {
-  if (!isodate) return ''
-  const trimmed = isodate.trim()
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const [year, month, day] = trimmed.split('-')
-    return `${day}/${month}/${year}`
-  }
-
-  return trimmed
-}
-
-const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+// Meses abreviados para el formato único de fechas de la app: DD/Mmm/AAAA (p. ej. 11/Sep/2026)
+const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
 /**
- * Convierte una fecha ISO AAAA-MM-DD a un texto corto como "28 oct".
+ * Convierte una fecha ISO AAAA-MM-DD al formato de la app, DD/Mmm/AAAA (p. ej. 11/Sep/2026).
+ * Todas las fechas que se muestran al usuario pasan por aquí.
  * @param {string} isodate - Fecha en formato AAAA-MM-DD.
  * @returns {string}
  */
-export function formatDateShort(isodate) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isodate || '')
-  if (!match) return isodate || ''
-  return `${Number(match[3])} ${MONTHS_SHORT[Number(match[2]) - 1]}`
+export function formatDateFromISO(isodate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((isodate || '').trim())
+  if (!match) return (isodate || '').trim()
+  return `${match[3]}/${MONTHS_SHORT[Number(match[2]) - 1]}/${match[1]}`
+}
+
+/**
+ * Fecha de hoy en formato AAAA-MM-DD según el reloj local del navegador.
+ * @returns {string}
+ */
+export function todayISO() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
 }
 
 /**
@@ -150,9 +146,12 @@ function validateDateString(strValue) {
  * Valida un campo individual según las reglas de negocio.
  * @param {string} fieldName - Nombre del campo.
  * @param {any} value - Valor actual del campo.
+ * @param {Object} [options]
+ * @param {string} [options.originalDate] - Fecha guardada del evento al editarlo: se permite
+ *   conservarla aunque ya haya pasado, pero no cambiarla por otra fecha pasada.
  * @returns {string|null} - Mensaje de error o null si es válido.
  */
-export function validateEventField(fieldName, value) {
+export function validateEventField(fieldName, value, { originalDate } = {}) {
   const strValue = typeof value === 'string' ? value.trim() : value
 
   switch (fieldName) {
@@ -173,7 +172,12 @@ export function validateEventField(fieldName, value) {
       if (!strValue) {
         return 'La fecha del evento es obligatoria.'
       }
-      return validateDateString(strValue)
+      const formatError = validateDateString(strValue)
+      if (formatError) return formatError
+      if (strValue < todayISO() && strValue !== originalDate) {
+        return 'La fecha del evento no puede ser anterior a hoy.'
+      }
+      return null
     }
 
     case 'event_type': {
@@ -225,14 +229,15 @@ export function validateEventField(fieldName, value) {
 /**
  * Valida todo el formulario de evento.
  * @param {Object} formData - Objeto con los datos del formulario.
+ * @param {Object} [options] - Ver validateEventField (originalDate).
  * @returns {Object} - Diccionario de errores { [fieldName]: string }.
  */
-export function validateEventForm(formData) {
+export function validateEventForm(formData, options = {}) {
   const errors = {}
   const fields = ['name', 'event_date', 'event_type', 'status', 'contact', 'location', 'description']
 
   for (const field of fields) {
-    const error = validateEventField(field, formData[field])
+    const error = validateEventField(field, formData[field], options)
     if (error) {
       errors[field] = error
     }
@@ -246,9 +251,13 @@ export function validateEventForm(formData) {
  * (subtareas logísticas) según las reglas de negocio.
  * @param {string} fieldName - Nombre del campo.
  * @param {any} value - Valor actual del campo.
+ * @param {Object} [options]
+ * @param {string} [options.eventDate] - Fecha del evento (AAAA-MM-DD): la fecha objetivo no puede superarla.
+ * @param {string} [options.originalDate] - Fecha guardada de la gestión al editarla: se permite
+ *   conservarla aunque ya haya pasado.
  * @returns {string|null} - Mensaje de error o null si es válido.
  */
-export function validateSubtaskField(fieldName, value) {
+export function validateSubtaskField(fieldName, value, { eventDate, originalDate } = {}) {
   const strValue = typeof value === 'string' ? value.trim() : value
 
   switch (fieldName) {
@@ -276,7 +285,19 @@ export function validateSubtaskField(fieldName, value) {
       if (!strValue) {
         return 'La fecha objetivo es obligatoria.'
       }
-      return validateDateString(strValue)
+      const formatError = validateDateString(strValue)
+      if (formatError) return formatError
+      if (strValue === originalDate) return null
+      // La gestión debe hacerse entre hoy y el día del evento
+      if (strValue < todayISO()) {
+        return 'La fecha objetivo no puede ser anterior a hoy.'
+      }
+      if (eventDate && strValue > eventDate) {
+        // El "word joiner" (\u2060) evita que la fecha se parta en dos líneas tras una barra
+        const date = formatDateFromISO(eventDate).replaceAll('/', '/\u2060')
+        return `La fecha objetivo no puede ser posterior a la fecha del evento (${date}).`
+      }
+      return null
     }
 
     case 'estimated_hours': {
@@ -306,18 +327,30 @@ export function validateSubtaskField(fieldName, value) {
 /**
  * Valida todo el formulario de creación de gestiones (subtareas logísticas).
  * @param {Object} formData - Objeto con los datos del formulario.
+ * @param {Object} [options] - Ver validateSubtaskField (eventDate, originalDate).
  * @returns {Object} - Diccionario de errores { [fieldName]: string }.
  */
-export function validateSubtaskForm(formData) {
+export function validateSubtaskForm(formData, options = {}) {
   const errors = {}
   const fields = ['name', 'type', 'scheduled_date', 'estimated_hours']
 
   for (const field of fields) {
-    const error = validateSubtaskField(field, formData[field])
+    const error = validateSubtaskField(field, formData[field], options)
     if (error) {
       errors[field] = error
     }
   }
 
   return errors
+}
+
+/**
+ * Indica si una gestión pendiente quedó después de la fecha de su evento
+ * (por ejemplo, porque el evento se adelantó). Las gestiones hechas no cuentan.
+ * @param {{scheduled_date: string, status: string}} task
+ * @param {string} [eventDate] - AAAA-MM-DD
+ * @returns {boolean}
+ */
+export function isAfterEventDate(task, eventDate) {
+  return Boolean(eventDate) && task.status !== 'done' && task.scheduled_date > eventDate
 }

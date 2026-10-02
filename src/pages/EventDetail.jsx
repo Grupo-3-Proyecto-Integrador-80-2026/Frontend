@@ -13,10 +13,14 @@ import {
   IconRefresh,
 } from '../components/Icons'
 import ConfirmDialog from '../components/ConfirmDialog'
+import DateField from '../components/DateField'
+import DateWarning from '../components/DateWarning'
 import StatusMessage from '../components/StatusMessage'
 import { apiFetch } from '../api/client'
 import {
   formatDateFromISO,
+  todayISO,
+  isAfterEventDate,
   getOptionLabel,
   validateEventField,
   validateEventForm,
@@ -133,6 +137,14 @@ export default function EventDetail() {
   const error = loadResult.error
   const fetchEvent = () => setAttempt((n) => n + 1)
 
+  // Las gestiones deben quedar entre hoy y la fecha del evento. Al editar una gestión
+  // se permite conservar su fecha guardada aunque ya haya vencido.
+  const newSubtaskDateRange = { eventDate: event?.event_date }
+  const editDateRange = (subtaskId) => ({
+    eventDate: event?.event_date,
+    originalDate: event?.subtasks?.find((subtask) => subtask.id === subtaskId)?.scheduled_date,
+  })
+
   // Manejador de cambios con re-validación inmediata
   const handleChangeSubtask = (e) => {
     const { name, value } = e.target
@@ -144,7 +156,7 @@ export default function EventDetail() {
 
     // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
     if (subtaskTouched[name] || subtaskErrors[name]) {
-      const fieldError = validateSubtaskField(name, value)
+      const fieldError = validateSubtaskField(name, value, newSubtaskDateRange)
       setSubtaskErrors((prev) => ({
         ...prev,
         [name]: fieldError,
@@ -160,7 +172,7 @@ export default function EventDetail() {
       [name]: true,
     }))
 
-    const fieldError = validateSubtaskField(name, value)
+    const fieldError = validateSubtaskField(name, value, newSubtaskDateRange)
     setSubtaskErrors((prev) => ({
       ...prev,
       [name]: fieldError,
@@ -180,7 +192,7 @@ export default function EventDetail() {
     setSubtaskTouched(allTouched)
 
     // Validar todos los campos
-    const formErrors = validateSubtaskForm(subtaskForm)
+    const formErrors = validateSubtaskForm(subtaskForm, newSubtaskDateRange)
     setSubtaskErrors(formErrors)
 
     if (Object.keys(formErrors).length > 0) {
@@ -275,7 +287,7 @@ export default function EventDetail() {
 
     // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
     if (eventTouched[name] || eventErrors[name]) {
-      const fieldError = validateEventField(name, value)
+      const fieldError = validateEventField(name, value, { originalDate: event.event_date })
       setEventErrors((prev) => ({
         ...prev,
         [name]: fieldError,
@@ -290,7 +302,7 @@ export default function EventDetail() {
       [name]: true,
     }))
 
-    const fieldError = validateEventField(name, value)
+    const fieldError = validateEventField(name, value, { originalDate: event.event_date })
     setEventErrors((prev) => ({
       ...prev,
       [name]: fieldError,
@@ -309,7 +321,7 @@ export default function EventDetail() {
     setEventTouched(allTouched)
 
     // Validar todos los campos
-    const formErrors = validateEventForm(eventForm)
+    const formErrors = validateEventForm(eventForm, { originalDate: event.event_date })
     setEventErrors(formErrors)
 
     if (Object.keys(formErrors).length > 0) {
@@ -405,7 +417,7 @@ export default function EventDetail() {
       if (entry.touched[name] || entry.errors[name]) {
         nextEntry.errors = {
           ...entry.errors,
-          [name]: validateSubtaskField(name, value),
+          [name]: validateSubtaskField(name, value, editDateRange(subtaskId)),
         }
       }
 
@@ -425,7 +437,7 @@ export default function EventDetail() {
         [subtaskId]: {
           ...entry,
           touched: { ...entry.touched, [name]: true },
-          errors: { ...entry.errors, [name]: validateSubtaskField(name, value) },
+          errors: { ...entry.errors, [name]: validateSubtaskField(name, value, editDateRange(subtaskId)) },
         },
       }
     })
@@ -444,7 +456,7 @@ export default function EventDetail() {
     }, {})
 
     // Validar todos los campos
-    const formErrors = validateSubtaskForm(entry.form)
+    const formErrors = validateSubtaskForm(entry.form, editDateRange(subtaskId))
     const hasErrors = Object.keys(formErrors).length > 0
 
     setEditingSubtasks((prev) => {
@@ -790,11 +802,11 @@ export default function EventDetail() {
                 <label htmlFor="event-date" className="field-label">
                   Fecha del evento <span className="req-star">*</span>
                 </label>
-                <input
+                <DateField
                   id="event-date"
-                  type="date"
                   name="event_date"
                   value={eventForm.event_date}
+                  min={event.event_date < todayISO() ? event.event_date : todayISO()}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
                   className={`field-input ${eventTouched.event_date && eventErrors.event_date ? 'field-input-error' : ''}`}
@@ -1115,11 +1127,12 @@ export default function EventDetail() {
                   <label htmlFor="subtask-date" className="field-label">
                     Fecha objetivo <span className="req-star">*</span>
                   </label>
-                  <input
+                  <DateField
                     id="subtask-date"
-                    type="date"
                     name="scheduled_date"
                     value={subtaskForm.scheduled_date}
+                    min={todayISO()}
+                    max={event.event_date}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
                     className={`field-input ${subtaskTouched.scheduled_date && subtaskErrors.scheduled_date ? 'field-input-error' : ''}`}
@@ -1324,11 +1337,12 @@ export default function EventDetail() {
                         <label htmlFor={`edit-subtask-${task.id}-date`} className="field-label">
                           Fecha objetivo <span className="req-star">*</span>
                         </label>
-                        <input
+                        <DateField
                           id={`edit-subtask-${task.id}-date`}
-                          type="date"
                           name="scheduled_date"
                           value={editEntry.form.scheduled_date}
+                          min={task.scheduled_date < todayISO() ? task.scheduled_date : todayISO()}
+                          max={event.event_date}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
                           className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
@@ -1452,8 +1466,9 @@ export default function EventDetail() {
               }
 
               // Tarjeta en modo solo lectura, con su botón de edición
+              const afterEvent = isAfterEventDate(task, event.event_date)
               return (
-                <div key={task.id} className="event-card-item">
+                <div key={task.id} className={`event-card-item ${afterEvent ? 'card-date-warning' : ''}`}>
                   <div className="event-card-top">
                     <span className="event-status-badge">
                       {getOptionLabel(TASK_STATUSES, task.status)}
@@ -1468,6 +1483,8 @@ export default function EventDetail() {
 
                   <h3 className="event-name">{task.name}</h3>
                   <p className="event-client">Tipo: {getOptionLabel(TASK_TYPES, task.type)}</p>
+
+                  {afterEvent && <DateWarning eventDate={event.event_date} />}
 
                   <div className="event-details-list">
                     <div className="event-detail-row">

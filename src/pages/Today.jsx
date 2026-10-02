@@ -11,9 +11,10 @@ import {
 } from '../components/Icons'
 import SortRuleHelp from '../components/SortRuleHelp'
 import StatusMessage from '../components/StatusMessage'
+import DateWarning from '../components/DateWarning'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
 import { apiFetch } from '../api/client'
-import { daysBetween, formatDateShort, getOptionLabel, TASK_STATUSES } from '../utils/validators'
+import { daysBetween, formatDateFromISO, getOptionLabel, isAfterEventDate, TASK_STATUSES } from '../utils/validators'
 
 // "Hecho" no aparece en Hoy (el backend excluye las gestiones terminadas)
 const STATUS_FILTER_OPTIONS = TASK_STATUSES.filter((status) => status.value !== 'done')
@@ -53,20 +54,19 @@ function describeRelativeDate(groupKey, scheduledDate, today) {
   return null
 }
 
+// "viernes, 02/Oct/2026": día de la semana + el formato único de fechas de la app
 function formatLongDate(isodate) {
-  return new Date(`${isodate}T12:00:00`).toLocaleDateString('es-CO', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  })
+  const weekday = new Date(`${isodate}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long' })
+  return `${weekday}, ${formatDateFromISO(isodate)}`
 }
 
-function TodayCard({ task, group, today }) {
+function TodayCard({ task, group, today, eventDate }) {
   const relative = describeRelativeDate(group.key, task.scheduled_date, today)
   const hours = hoursFormatter.format(Number(task.estimated_hours))
+  const afterEvent = isAfterEventDate(task, eventDate)
 
   return (
-    <li className={`today-card today-card-${group.key}`}>
+    <li className={`today-card today-card-${group.key} ${afterEvent ? 'card-date-warning' : ''}`}>
       <div className="today-card-top">
         <h3 className="today-card-title">{task.name}</h3>
         {group.badge && (
@@ -82,7 +82,7 @@ function TodayCard({ task, group, today }) {
         <span className="today-meta-item">
           <IconCalendar size={14} />
           <span>
-            {formatDateShort(task.scheduled_date)}
+            {formatDateFromISO(task.scheduled_date)}
             {relative && <span className="today-meta-relative"> · {relative}</span>}
           </span>
         </span>
@@ -92,11 +92,13 @@ function TodayCard({ task, group, today }) {
         </span>
         <span className="task-status-chip">{getOptionLabel(TASK_STATUSES, task.status)}</span>
       </div>
+
+      {afterEvent && <DateWarning eventDate={eventDate} />}
     </li>
   )
 }
 
-function TodayGroup({ group, items, today, windowDays }) {
+function TodayGroup({ group, items, today, windowDays, eventDateById }) {
   const titleId = `today-group-${group.key}`
   const title = group.key === 'upcoming' ? `${group.title} (${windowDays} días)` : group.title
 
@@ -116,7 +118,13 @@ function TodayGroup({ group, items, today, windowDays }) {
       ) : (
         <ul className="today-card-list plain-list">
           {items.map((task) => (
-            <TodayCard key={task.id} task={task} group={group} today={today} />
+            <TodayCard
+              key={task.id}
+              task={task}
+              group={group}
+              today={today}
+              eventDate={eventDateById.get(task.event_id)}
+            />
           ))}
         </ul>
       )}
@@ -156,6 +164,15 @@ export default function Today() {
   const { data, error } = result
   const loadToday = () => setAttempt((n) => n + 1)
 
+  // Al volver a la pestaña se recargan los datos: pudieron cambiar en otra pestaña o dispositivo
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') setAttempt((n) => n + 1)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   // Opciones del filtro por evento; si fallan, el filtro queda solo con "Todos"
   useEffect(() => {
     apiFetch('/api/events/')
@@ -177,6 +194,9 @@ export default function Today() {
     ? GROUPS.reduce((sum, group) => sum + (data[group.key]?.length || 0), 0)
     : 0
 
+  // Fecha de cada evento, para avisar si una gestión quedó después de su evento
+  const eventDateById = new Map(events.map((ev) => [ev.id, ev.event_date]))
+
   const renderGroups = () => (
     <div className="today-groups">
       {GROUPS.map((group) => (
@@ -184,6 +204,7 @@ export default function Today() {
           key={group.key}
           group={group}
           items={data[group.key] || []}
+          eventDateById={eventDateById}
           today={data.today}
           windowDays={windowDays}
         />
