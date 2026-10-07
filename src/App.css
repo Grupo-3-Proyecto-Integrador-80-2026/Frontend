@@ -1293,7 +1293,32 @@ button.btn-primary-action {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  max-width: 960px;
+  max-width: 1200px;
+}
+
+.today-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.today-aside {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (max-width: 991px) {
+  .today-layout {
+    grid-template-columns: 1fr;
+  }
+  .today-aside {
+    position: static;
+    order: -1;
+  }
 }
 
 .today-toolbar {
