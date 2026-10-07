@@ -233,8 +233,8 @@
 }
 
 .header-description {
-  font-size: 0.85rem;
-  color: var(--slate-600);
+  font-size: 1rem;
+  color: var(--slate-700);
   margin: 0.2rem 0 0;
 }
 
