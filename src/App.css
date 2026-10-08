@@ -385,6 +385,157 @@
 }
 
 /* ==========================================================================
+   Botones: base común + variantes (solo cambian colores)
+   ========================================================================== */
+.btn-primary-action,
+.btn-submit-pro,
+.btn-sec-pro,
+.btn-cancel-pro,
+.btn-danger-pro,
+.btn-danger-ghost,
+.btn-manage-event {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  min-height: 2.25rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-primary-action:focus-visible,
+.btn-submit-pro:focus-visible,
+.btn-sec-pro:focus-visible,
+.btn-cancel-pro:focus-visible,
+.btn-danger-pro:focus-visible,
+.btn-danger-ghost:focus-visible,
+.btn-manage-event:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.btn-primary-action:disabled,
+.btn-submit-pro:disabled,
+.btn-sec-pro:disabled,
+.btn-cancel-pro:disabled,
+.btn-danger-pro:disabled,
+.btn-danger-ghost:disabled,
+.btn-manage-event:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Principal: la acción que avanza (guardar, crear, editar) */
+.btn-primary-action,
+.btn-submit-pro {
+  background-color: var(--brand-600);
+  color: #ffffff;
+}
+
+.btn-primary-action:hover:not(:disabled),
+.btn-submit-pro:hover:not(:disabled) {
+  background-color: var(--brand-700);
+}
+
+/* Secundario: con borde (volver, limpiar, agregar) */
+.btn-sec-pro {
+  background-color: #ffffff;
+  color: var(--slate-700);
+  border-color: var(--slate-200);
+}
+
+.btn-sec-pro:hover:not(:disabled) {
+  background-color: var(--slate-100);
+  color: var(--slate-900);
+}
+
+/* Terciario: sin borde (cancelar); mismo tamaño que los demás */
+.btn-cancel-pro {
+  background-color: transparent;
+  color: var(--slate-600);
+}
+
+.btn-cancel-pro:hover:not(:disabled) {
+  background-color: var(--slate-100);
+  color: var(--slate-900);
+}
+
+/* Tonal: acciones dentro de las tarjetas (editar gestión) */
+.btn-manage-event {
+  background-color: var(--brand-50);
+  color: var(--brand-700);
+  border-color: var(--brand-200);
+}
+
+.btn-manage-event:hover:not(:disabled) {
+  background-color: var(--brand-100);
+}
+
+/* Destructivo: contorno rojo (repetible) y sólido (diálogo de confirmación) */
+.btn-danger-ghost {
+  background-color: #ffffff;
+  color: var(--rose-600);
+  border-color: var(--rose-200);
+}
+
+.btn-danger-ghost:hover:not(:disabled) {
+  background-color: var(--rose-50);
+}
+
+.btn-danger-pro {
+  background-color: var(--rose-600);
+  color: #ffffff;
+}
+
+.btn-danger-pro:hover:not(:disabled) {
+  background-color: var(--rose-500);
+}
+
+/* Tamaño compacto (Quitar, avisos) */
+.btn-small,
+.btn-alert-outline,
+.btn-alert-primary {
+  min-height: 1.85rem;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  border-radius: 8px;
+  font-family: inherit;
+  gap: 0.3rem;
+}
+
+.btn-alert-outline,
+.btn-alert-primary {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-alert-outline {
+  background-color: transparent;
+  border: 1px solid var(--emerald-600);
+  color: var(--emerald-600);
+}
+
+.btn-alert-primary {
+  background-color: var(--emerald-600);
+  border: 1px solid transparent;
+  color: #ffffff;
+}
+
+/* ==========================================================================
    Events Section & Cards
    ========================================================================== */
 .events-section {
@@ -411,24 +562,6 @@
   font-size: 0.75rem;
   color: var(--slate-500);
   margin: 0.15rem 0 0;
-}
-
-.btn-primary-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background-color: var(--brand-600);
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 0.5rem 0.85rem;
-  border-radius: 12px;
-  text-decoration: none;
-  transition: background-color 0.2s;
-}
-
-.btn-primary-action:hover {
-  background-color: var(--brand-700);
 }
 
 .events-cards-grid {
@@ -530,25 +663,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-}
-
-.btn-manage-event {
-  display: block;
-  text-align: center;
-  padding: 0.45rem 0.9rem;
-  background-color: var(--brand-50);
-  color: var(--brand-700);
-  font-weight: 700;
-  font-size: 0.75rem;
-  border: none;
-  border-radius: 8px;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.btn-manage-event:hover {
-  background-color: var(--brand-100);
 }
 
 /* Fila Editar / Eliminar dentro del pie de una tarjeta de gestión */
@@ -659,6 +773,20 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.form-card-header-main {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.form-card-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
 .header-icon-box {
@@ -815,60 +943,6 @@
   padding-top: 0.75rem;
   border-top: 1px solid var(--slate-100);
   margin-top: 0.5rem;
-}
-
-.btn-submit-pro {
-  background-color: var(--brand-600);
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 750;
-  padding: 0.6rem 1.15rem;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.btn-submit-pro:hover:not(:disabled) {
-  background-color: var(--brand-700);
-}
-
-.btn-submit-pro:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-sec-pro {
-  background-color: transparent;
-  color: var(--slate-600);
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 0.6rem 0.85rem;
-  border-radius: 10px;
-  border: 1px solid var(--slate-200);
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.btn-sec-pro:hover:not(:disabled) {
-  background-color: var(--slate-100);
-  color: var(--slate-900);
-}
-
-.btn-cancel-pro {
-  background-color: transparent;
-  color: var(--slate-500);
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 0.6rem 0.85rem;
-  border-radius: 10px;
-  text-decoration: none;
-  transition: background-color 0.2s;
-}
-
-.btn-cancel-pro:hover {
-  background-color: var(--slate-100);
-  color: var(--slate-800);
 }
 
 /* ==========================================================================
@@ -1046,28 +1120,6 @@
   gap: 0.5rem;
 }
 
-.btn-alert-outline {
-  padding: 0.3rem 0.65rem;
-  background-color: transparent;
-  border: 1px solid var(--emerald-600);
-  color: var(--emerald-600);
-  font-size: 0.72rem;
-  font-weight: 700;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.btn-alert-primary {
-  padding: 0.3rem 0.65rem;
-  background-color: var(--emerald-600);
-  border: 1px solid transparent;
-  color: #ffffff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
 .btn-close-alert {
   background: transparent;
   border: none;
@@ -1149,46 +1201,6 @@
   border-top: 1px solid var(--slate-100);
 }
 
-/* Acción destructiva reservada para eliminar (Guía de Microcopy) */
-.btn-danger-pro {
-  background-color: var(--rose-600);
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 750;
-  padding: 0.6rem 1.15rem;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-/* Variante discreta para acciones destructivas que se repiten (tarjetas, fichas) */
-.btn-danger-ghost {
-  background-color: #ffffff;
-  color: var(--rose-600);
-  font-size: 0.78rem;
-  font-weight: 700;
-  font-family: inherit;
-  padding: 0.6rem 1.15rem;
-  border-radius: 10px;
-  border: 1px solid var(--rose-200);
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.btn-danger-ghost:hover {
-  background-color: var(--rose-50);
-}
-
-.btn-danger-pro:hover:not(:disabled) {
-  background-color: var(--rose-500);
-}
-
-.btn-danger-pro:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .confirm-dialog button:focus-visible {
   outline: 2px solid var(--brand-500);
   outline-offset: 2px;
@@ -1264,12 +1276,6 @@
   list-style: none;
   margin: 0;
   padding: 0;
-}
-
-button.btn-primary-action {
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
 }
 
 .sr-only {
@@ -1611,16 +1617,6 @@ button.btn-primary-action {
   font-size: 0.8rem;
   font-weight: 800;
   color: var(--slate-700);
-}
-
-.btn-small {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.3rem 0.6rem;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
 }
 
 .btn-add-row {
