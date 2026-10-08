@@ -1,4 +1,32 @@
 /* ==========================================================================
+   Escala tipográfica (única fuente de tamaños de letra)
+   xs: info secundaria (chips, contadores, ayudas)  · mínimo permitido
+   sm: etiquetas, errores, botones, navegación, avisos
+   base: texto principal e inputs
+   lg: títulos de sección y tarjeta
+   xl: títulos de página
+   Si ya tienes un :root con los colores, mueve estas variables ahí.
+   ========================================================================== */
+:root {
+  --text-xs: 0.8125rem;  /* 13px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.5rem;     /* 24px */
+}
+
+body {
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* ==========================================================================
    App Layout
    ========================================================================== */
 .app-layout {
@@ -19,8 +47,6 @@
 }
 
 .main-content-scroll {
-  /* Contiene a los elementos absolutos (p. ej. .sr-only): sin esto, en Chrome
-     agrandan la página y aparece un espacio en blanco al final del scroll */
   position: relative;
   flex: 1;
   overflow-y: auto;
@@ -34,7 +60,7 @@
 }
 
 /* ==========================================================================
-   Sidebar (claro)
+   Sidebar
    ========================================================================== */
 .main-sidebar {
   width: 260px;
@@ -82,18 +108,20 @@
 }
 
 .brand-title {
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--brand-700);
   line-height: 1.2;
+  text-align: center;
 }
 
 .brand-subtitle {
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--slate-500);
   margin: 0;
+  text-align: center;
 }
 
 /* Navegación Sidebar */
@@ -110,7 +138,7 @@
   padding: 0.6rem 0.75rem;
   border-radius: 12px;
   border: 1px solid transparent;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--slate-600);
   text-decoration: none;
@@ -162,7 +190,7 @@
 }
 
 .profile-name {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--slate-900);
   margin: 0;
@@ -172,7 +200,7 @@
 }
 
 .profile-limit {
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--slate-600);
   margin: 0.1rem 0 0;
@@ -222,24 +250,26 @@
   min-width: 0;
 }
 
-.header-title {
-  font-size: 1.6rem;
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-title,
+.section-title {
+  font-size: var(--text-xl);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--slate-900);
   margin: 0;
 }
 
-.header-description {
-  font-size: 0.85rem;
-  color: var(--slate-600);
+.header-description,
+.section-subtitle {
+  font-size: var(--text-base);
+  color: var(--slate-700);
   margin: 0.2rem 0 0;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
 }
 
 .btn-mobile-menu {
@@ -297,15 +327,15 @@
 }
 
 .card-pro-header h3 {
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   font-weight: 800;
   color: var(--slate-900);
   margin: 0;
 }
 
 .status-pill {
-  font-size: 0.68rem;
-  font-weight: 750;
+  font-size: var(--text-xs);
+  font-weight: 700;
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
 }
@@ -323,7 +353,7 @@
 }
 
 .status-message {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   margin: 0.25rem 0 0.5rem;
 }
@@ -337,7 +367,7 @@
 }
 
 .endpoint-hint {
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--slate-500);
   margin: 0;
 }
@@ -350,8 +380,8 @@
 }
 
 .badge-chip {
-  font-size: 0.68rem;
-  font-weight: 750;
+  font-size: var(--text-xs);
+  font-weight: 700;
   background-color: var(--brand-50);
   color: var(--brand-700);
   border: 1px solid var(--brand-200);
@@ -364,7 +394,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.4rem 0;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   border-bottom: 1px dashed var(--slate-100);
 }
 
@@ -383,6 +413,151 @@
 }
 
 /* ==========================================================================
+   Botones
+   ========================================================================== */
+.btn-primary-action,
+.btn-submit-pro,
+.btn-sec-pro,
+.btn-cancel-pro,
+.btn-danger-pro,
+.btn-danger-ghost,
+.btn-manage-event {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  min-height: 2.25rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-primary-action:focus-visible,
+.btn-submit-pro:focus-visible,
+.btn-sec-pro:focus-visible,
+.btn-cancel-pro:focus-visible,
+.btn-danger-pro:focus-visible,
+.btn-danger-ghost:focus-visible,
+.btn-manage-event:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.btn-primary-action:disabled,
+.btn-submit-pro:disabled,
+.btn-sec-pro:disabled,
+.btn-cancel-pro:disabled,
+.btn-danger-pro:disabled,
+.btn-danger-ghost:disabled,
+.btn-manage-event:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary-action,
+.btn-submit-pro {
+  background-color: var(--brand-600);
+  color: #ffffff;
+}
+
+.btn-primary-action:hover:not(:disabled),
+.btn-submit-pro:hover:not(:disabled) {
+  background-color: var(--brand-700);
+}
+
+.btn-sec-pro {
+  background-color: #ffffff;
+  color: var(--slate-700);
+  border-color: var(--slate-200);
+}
+
+.btn-sec-pro:hover:not(:disabled) {
+  background-color: var(--slate-100);
+  color: var(--slate-900);
+}
+
+.btn-cancel-pro {
+  background-color: transparent;
+  color: var(--slate-600);
+}
+
+.btn-cancel-pro:hover:not(:disabled) {
+  background-color: var(--slate-100);
+  color: var(--slate-900);
+}
+
+.btn-manage-event {
+  background-color: var(--brand-50);
+  color: var(--brand-700);
+  border-color: var(--brand-200);
+}
+
+.btn-manage-event:hover:not(:disabled) {
+  background-color: var(--brand-100);
+}
+
+.btn-danger-ghost {
+  background-color: #ffffff;
+  color: var(--rose-600);
+  border-color: var(--rose-200);
+}
+
+.btn-danger-ghost:hover:not(:disabled) {
+  background-color: var(--rose-50);
+}
+
+.btn-danger-pro {
+  background-color: var(--rose-600);
+  color: #ffffff;
+}
+
+.btn-danger-pro:hover:not(:disabled) {
+  background-color: var(--rose-500);
+}
+
+.btn-small,
+.btn-alert-outline,
+.btn-alert-primary {
+  min-height: 1.85rem;
+  padding: 0.25rem 0.65rem;
+  font-size: var(--text-xs);
+  border-radius: 8px;
+  font-family: inherit;
+  gap: 0.3rem;
+}
+
+.btn-alert-outline,
+.btn-alert-primary {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-alert-outline {
+  background-color: transparent;
+  border: 1px solid var(--emerald-600);
+  color: var(--emerald-600);
+}
+
+.btn-alert-primary {
+  background-color: var(--emerald-600);
+  border: 1px solid transparent;
+  color: #ffffff;
+}
+
+/* ==========================================================================
    Events Section & Cards
    ========================================================================== */
 .events-section {
@@ -396,37 +571,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-}
-
-.section-title {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: var(--slate-900);
-  margin: 0;
-}
-
-.section-subtitle {
-  font-size: 0.75rem;
-  color: var(--slate-500);
-  margin: 0.15rem 0 0;
-}
-
-.btn-primary-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background-color: var(--brand-600);
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 0.5rem 0.85rem;
-  border-radius: 12px;
-  text-decoration: none;
-  transition: background-color 0.2s;
-}
-
-.btn-primary-action:hover {
-  background-color: var(--brand-700);
 }
 
 .events-cards-grid {
@@ -465,7 +609,7 @@
   color: var(--brand-700);
   border: 1px solid var(--brand-200);
   border-radius: 4px;
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   font-weight: 800;
 }
 
@@ -473,20 +617,20 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--slate-500);
 }
 
 .event-name {
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-weight: 800;
   color: var(--slate-900);
   margin: 0;
 }
 
 .event-client {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: var(--slate-500);
   margin: 0;
 }
@@ -495,7 +639,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
 }
 
@@ -530,26 +674,6 @@
   gap: 0.75rem;
 }
 
-.btn-manage-event {
-  display: block;
-  text-align: center;
-  padding: 0.45rem 0.9rem;
-  background-color: var(--brand-50);
-  color: var(--brand-700);
-  font-weight: 700;
-  font-size: 0.75rem;
-  border: none;
-  border-radius: 8px;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.btn-manage-event:hover {
-  background-color: var(--brand-100);
-}
-
-/* Fila Editar / Eliminar dentro del pie de una tarjeta de gestión */
 .event-card-actions {
   flex: 1;
   display: flex;
@@ -561,14 +685,12 @@
   flex: 1;
 }
 
-/* Texto de descripción en la vista de detalle del evento */
 .detail-desc-text {
   margin: 0;
   white-space: pre-line;
   color: var(--slate-600);
 }
 
-/* Formulario de edición inline dentro de una tarjeta de gestión */
 .event-edit-form {
   display: flex;
   flex-direction: column;
@@ -608,12 +730,12 @@
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   flex-shrink: 0;
 }
 
 .team-name {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--slate-800);
 }
@@ -655,8 +777,32 @@
   border-bottom: 1px solid var(--brand-100);
   padding: 1rem 1.5rem;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 0.75rem;
+}
+
+.form-card-header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .form-card-header {
+    flex-wrap: wrap;
+  }
+  .form-card-header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 .header-icon-box {
@@ -672,14 +818,14 @@
 }
 
 .form-heading {
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
   font-weight: 800;
   color: var(--slate-900);
   margin: 0;
 }
 
 .form-subheading {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--slate-500);
   margin: 0.1rem 0 0;
 }
@@ -704,13 +850,13 @@
 }
 
 .field-label {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 800;
   color: var(--slate-700);
 }
 
 .char-counter {
-  font-size: 0.68rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--slate-500);
 }
@@ -720,7 +866,7 @@
 }
 
 .field-hint {
-  font-size: 0.68rem;
+  font-size: var(--text-xs);
   color: var(--slate-500);
   margin-top: 0.1rem;
 }
@@ -728,7 +874,7 @@
 .field-input {
   width: 100%;
   padding: 0.55rem 0.85rem;
-  font-size: 0.78rem;
+  font-size: var(--text-base);
   font-family: inherit;
   border-radius: 10px;
   background-color: var(--slate-50);
@@ -765,7 +911,7 @@
 
 .field-error-text {
   color: var(--rose-600);
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   margin-top: 0.1rem;
 }
@@ -792,7 +938,7 @@
   border: 1px solid var(--brand-200);
   border-radius: 12px;
   color: var(--brand-900);
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
 }
 
 .text-brand-icon {
@@ -813,60 +959,6 @@
   padding-top: 0.75rem;
   border-top: 1px solid var(--slate-100);
   margin-top: 0.5rem;
-}
-
-.btn-submit-pro {
-  background-color: var(--brand-600);
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 750;
-  padding: 0.6rem 1.15rem;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.btn-submit-pro:hover:not(:disabled) {
-  background-color: var(--brand-700);
-}
-
-.btn-submit-pro:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-sec-pro {
-  background-color: transparent;
-  color: var(--slate-600);
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 0.6rem 0.85rem;
-  border-radius: 10px;
-  border: 1px solid var(--slate-200);
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.btn-sec-pro:hover:not(:disabled) {
-  background-color: var(--slate-100);
-  color: var(--slate-900);
-}
-
-.btn-cancel-pro {
-  background-color: transparent;
-  color: var(--slate-500);
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 0.6rem 0.85rem;
-  border-radius: 10px;
-  text-decoration: none;
-  transition: background-color 0.2s;
-}
-
-.btn-cancel-pro:hover {
-  background-color: var(--slate-100);
-  color: var(--slate-800);
 }
 
 /* ==========================================================================
@@ -893,14 +985,14 @@
 }
 
 .preview-card-header h3 {
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   font-weight: 800;
   color: var(--slate-900);
   margin: 0;
 }
 
 .badge-preview-tag {
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   font-weight: 800;
   background-color: var(--brand-100);
   color: var(--brand-700);
@@ -909,7 +1001,7 @@
 }
 
 .preview-intro {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--slate-500);
   margin: 0;
 }
@@ -929,7 +1021,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   padding-bottom: 0.4rem;
   border-bottom: 1px dashed var(--slate-200);
 }
@@ -962,7 +1054,7 @@
   border: 1px solid var(--slate-200);
   border-radius: 8px;
   padding: 0.5rem 0.65rem;
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--slate-700);
   margin: 0.25rem 0 0;
   min-height: 45px;
@@ -971,8 +1063,8 @@
 .badge-preview-chip {
   background-color: var(--brand-100);
   color: var(--brand-800);
-  font-size: 0.68rem;
-  font-weight: 750;
+  font-size: var(--text-xs);
+  font-weight: 700;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
 }
@@ -981,8 +1073,8 @@
   background-color: var(--amber-50);
   color: var(--amber-600);
   border: 1px solid var(--amber-200);
-  font-size: 0.68rem;
-  font-weight: 750;
+  font-size: var(--text-xs);
+  font-weight: 700;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
 }
@@ -1001,7 +1093,7 @@
   gap: 0.85rem;
   padding: 0.85rem 1.15rem;
   border-radius: 12px;
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
 }
 
 .banner-success {
@@ -1034,7 +1126,7 @@
 }
 
 .banner-subtext {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
   margin: 0.15rem 0 0;
 }
@@ -1042,28 +1134,6 @@
 .banner-actions {
   display: flex;
   gap: 0.5rem;
-}
-
-.btn-alert-outline {
-  padding: 0.3rem 0.65rem;
-  background-color: transparent;
-  border: 1px solid var(--emerald-600);
-  color: var(--emerald-600);
-  font-size: 0.72rem;
-  font-weight: 700;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.btn-alert-primary {
-  padding: 0.3rem 0.65rem;
-  background-color: var(--emerald-600);
-  border: 1px solid transparent;
-  color: #ffffff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  border-radius: 6px;
-  cursor: pointer;
 }
 
 .btn-close-alert {
@@ -1124,14 +1194,14 @@
 
 .confirm-dialog-title {
   margin: 0.25rem 0 0;
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
   font-weight: 800;
   color: var(--slate-900);
 }
 
 .confirm-dialog-message {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   line-height: 1.55;
   color: var(--slate-600);
 }
@@ -1145,46 +1215,6 @@
   margin-top: 0.5rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--slate-100);
-}
-
-/* Acción destructiva reservada para eliminar (Guía de Microcopy) */
-.btn-danger-pro {
-  background-color: var(--rose-600);
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 750;
-  padding: 0.6rem 1.15rem;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-/* Variante discreta para acciones destructivas que se repiten (tarjetas, fichas) */
-.btn-danger-ghost {
-  background-color: #ffffff;
-  color: var(--rose-600);
-  font-size: 0.78rem;
-  font-weight: 700;
-  font-family: inherit;
-  padding: 0.6rem 1.15rem;
-  border-radius: 10px;
-  border: 1px solid var(--rose-200);
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.btn-danger-ghost:hover {
-  background-color: var(--rose-50);
-}
-
-.btn-danger-pro:hover:not(:disabled) {
-  background-color: var(--rose-500);
-}
-
-.btn-danger-pro:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .confirm-dialog button:focus-visible {
@@ -1234,14 +1264,14 @@
 }
 
 .status-message-title {
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
   font-weight: 800;
   color: var(--slate-900);
   margin: 0;
 }
 
 .status-message-desc {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
   margin: 0;
   max-width: 420px;
@@ -1262,12 +1292,6 @@
   list-style: none;
   margin: 0;
   padding: 0;
-}
-
-button.btn-primary-action {
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
 }
 
 .sr-only {
@@ -1291,7 +1315,32 @@ button.btn-primary-action {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  max-width: 960px;
+  max-width: 1200px;
+}
+
+.today-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.today-aside {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (max-width: 991px) {
+  .today-layout {
+    grid-template-columns: 1fr;
+  }
+  .today-aside {
+    position: static;
+    order: -1;
+  }
 }
 
 .today-toolbar {
@@ -1324,7 +1373,7 @@ button.btn-primary-action {
 
 .today-date {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
 }
 
@@ -1345,7 +1394,7 @@ button.btn-primary-action {
   border: none;
   padding: 0.5rem 0.25rem;
   font: inherit;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--brand-700);
   cursor: pointer;
@@ -1375,7 +1424,7 @@ button.btn-primary-action {
 
 .sort-help-panel p {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--slate-700);
 }
@@ -1398,7 +1447,7 @@ button.btn-primary-action {
   align-items: center;
   gap: 0.5rem;
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--text-lg);
   font-weight: 800;
 }
 
@@ -1415,7 +1464,7 @@ button.btn-primary-action {
   height: 1.5rem;
   padding: 0 0.4rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 800;
   color: #ffffff;
 }
@@ -1427,7 +1476,7 @@ button.btn-primary-action {
 .today-group-empty {
   margin: 0;
   padding: 0.85rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
   background-color: #ffffff;
   border: 1px dashed var(--slate-300);
@@ -1465,7 +1514,7 @@ button.btn-primary-action {
 
 .today-card-title {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: var(--text-base);
   font-weight: 700;
   color: var(--slate-900);
 }
@@ -1474,7 +1523,7 @@ button.btn-primary-action {
   flex-shrink: 0;
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   color: #ffffff;
 }
@@ -1484,7 +1533,7 @@ button.btn-primary-action {
 
 .today-card-event {
   align-self: flex-start;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--brand-700);
   text-decoration: none;
@@ -1499,7 +1548,7 @@ button.btn-primary-action {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
 }
 
@@ -1514,13 +1563,12 @@ button.btn-primary-action {
   font-weight: 700;
 }
 
-/* Estado de la gestión: tono neutro para no competir con la urgencia */
 .task-status-chip {
   padding: 0.1rem 0.5rem;
   border-radius: 6px;
   background-color: var(--slate-100);
   color: var(--slate-700);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -1559,7 +1607,7 @@ button.btn-primary-action {
 
 .plan-legend {
   padding: 0 0.35rem;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   font-weight: 800;
   color: var(--slate-900);
 }
@@ -1581,19 +1629,9 @@ button.btn-primary-action {
 }
 
 .plan-row-title {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 800;
   color: var(--slate-700);
-}
-
-.btn-small {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.3rem 0.6rem;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
 }
 
 .btn-add-row {
@@ -1605,8 +1643,7 @@ button.btn-primary-action {
 
 
 /* ==========================================================================
-   Carga con desenfoque (LoadingOverlay): silueta o datos previos difuminados
-   tras un velo con blur y una tarjeta flotante con spinner
+   Carga con desenfoque (LoadingOverlay)
    ========================================================================== */
 .loading-layer {
   position: relative;
@@ -1645,7 +1682,7 @@ button.btn-primary-action {
   border: 1px solid var(--slate-200);
   border-radius: 999px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--slate-800);
 }
@@ -1728,23 +1765,27 @@ button.btn-primary-action {
 
 .auth-brand {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: center; 
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
+  text-align: center;
 }
 
 .auth-title {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: var(--text-xl);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--slate-900);
+  text-align: center;
 }
 
 .auth-subtitle {
   margin: -0.5rem 0 0;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
+  text-align: center;
 }
 
 .auth-form {
@@ -1754,21 +1795,19 @@ button.btn-primary-action {
 }
 
 .auth-form .field-input {
-  font-size: 0.9rem;
   padding: 0.65rem 0.85rem;
 }
 
 .auth-submit {
   width: 100%;
   padding: 0.75rem 1rem;
-  font-size: 0.9rem;
   margin-top: 0.25rem;
 }
 
 .auth-footer {
   margin: 0;
   text-align: center;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--slate-600);
 }
 
@@ -1780,7 +1819,7 @@ button.btn-primary-action {
 .auth-card .banner-alert {
   gap: 0.6rem;
   align-items: flex-start;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .auth-card .banner-alert > svg {
@@ -1809,11 +1848,11 @@ button.btn-primary-action {
   background-color: #ffffff;
   color: var(--rose-600);
   font: inherit;
+  font-size: var(--text-sm);
   font-weight: 700;
   cursor: pointer;
 }
 
-/* Campo de contraseña con botón mostrar/ocultar */
 .password-box {
   position: relative;
 }
@@ -1841,7 +1880,6 @@ button.btn-primary-action {
   background-color: var(--slate-100);
 }
 
-/* Cerrar sesión en la tarjeta de perfil */
 .btn-logout {
   display: flex;
   padding: 0.4rem;
@@ -1872,10 +1910,6 @@ button.btn-primary-action {
   }
 }
 
-/* ==========================================================================
-   Aviso: gestión con fecha posterior a la de su evento (siempre visible,
-   no bloquea acciones; desaparece al corregir la fecha)
-   ========================================================================== */
 .today-card.card-date-warning,
 .event-card-item.card-date-warning {
   background-color: var(--amber-50);
@@ -1895,7 +1929,7 @@ button.btn-primary-action {
   border-radius: 8px;
   background-color: #fef3c7;
   color: #92400e;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -1930,8 +1964,6 @@ button.btn-primary-action {
   pointer-events: none;
 }
 
-/* El control nativo queda debajo del campo (para que el calendario se abra ahí),
-   invisible y sin recibir clics ni foco */
 .date-field-native {
   position: absolute;
   inset: 0;

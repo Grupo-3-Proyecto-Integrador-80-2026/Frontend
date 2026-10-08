@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   IconPlus,
@@ -58,6 +58,20 @@ export default function CreateEvent() {
   // Plan inicial de gestiones: filas dinámicas que el usuario agrega o quita
   const [planRows, setPlanRows] = useState([])
   const nextRowKey = useRef(1)
+
+  const bannerRef = useRef(null)
+
+useEffect(() => {
+  if (!feedback.type) return
+
+  // Errores de campos: llevar al primer campo en rojo; si no hay (error del servidor), al banner
+  const target =
+    feedback.type === 'error'
+      ? document.querySelector('.field-input-error') || bannerRef.current
+      : bannerRef.current
+
+    target?.scrollIntoView({ behavior: 'smooth', block: feedback.type === 'error' ? 'center' : 'start' })
+  }, [feedback])
 
   const plannedHours = planRows.reduce(
     (sum, row) => sum + (Number(row.values.estimated_hours) || 0),
@@ -250,7 +264,7 @@ export default function CreateEvent() {
     <div className="create-page-container">
       {/* Alerta de Feedback (Éxito o Advertencia) */}
       {(feedback.type === 'success' || feedback.type === 'warning') && (
-        <div
+        <div ref={bannerRef}
           className={`banner-alert ${feedback.type === 'success' ? 'banner-success' : 'banner-warning'}`}
           role="status"
         >
@@ -284,7 +298,7 @@ export default function CreateEvent() {
       )}
 
       {feedback.type === 'error' && (
-        <div className="banner-alert banner-error" role="alert">
+        <div ref={bannerRef} className="banner-alert banner-error" role="alert">
           <div className="banner-icon-side">
             <IconAlertTriangle size={20} className="icon-rose" />
           </div>

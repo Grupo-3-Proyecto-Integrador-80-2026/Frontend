@@ -676,17 +676,30 @@ export default function EventDetail() {
 
       <div className="form-card-pro">
         <div className="form-card-header">
-          <div>
+          <div className="form-card-header-main">
             <h2 className="form-heading">{isEditingEvent ? 'Editar evento' : event.name}</h2>
             {isEditingEvent ? (
               <p className="form-subheading">Actualiza la información principal de la ficha</p>
             ) : (
               <p className="form-subheading">
-                <span className="badge-status-chip">{getOptionLabel(EVENT_STATUSES, event.status)}</span>{' '}
-                • Tipo: {getOptionLabel(EVENT_TYPES, event.event_type)}
+                <span className="badge-status-chip">{getOptionLabel(EVENT_STATUSES, event.status)}</span>
               </p>
             )}
           </div>
+
+          {!isEditingEvent && (
+            <div className="form-card-header-actions">
+              <Link to="/eventos" className="btn-sec-pro">
+                Volver a eventos
+              </Link>
+              <button type="button" className="btn-danger-ghost" onClick={handleRequestDeleteEvent}>
+                Eliminar evento
+              </button>
+              <button type="button" className="btn-primary-action" onClick={handleStartEditEvent}>
+                Editar evento
+              </button>
+            </div>
+          )}
         </div>
 
         {isEditingEvent ? (
@@ -930,22 +943,6 @@ export default function EventDetail() {
               <p className="detail-desc-text">
                 {event.description || <em className="muted">Sin descripción detallada.</em>}
               </p>
-            </div>
-
-            <div className="form-actions-row">
-              <Link to="/eventos" className="btn-sec-pro">
-                Volver a eventos
-              </Link>
-              <button
-                type="button"
-                className="btn-danger-ghost"
-                onClick={handleRequestDeleteEvent}
-              >
-                Eliminar evento
-              </button>
-              <button type="button" className="btn-primary-action" onClick={handleStartEditEvent}>
-                Editar evento
-              </button>
             </div>
           </div>
         )}

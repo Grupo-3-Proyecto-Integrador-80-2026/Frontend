@@ -132,6 +132,60 @@ function TodayGroup({ group, items, today, windowDays, eventDateById }) {
   )
 }
 
+function TodaySummary({ data, events, windowDays }) {
+  const pendingHours = [...(data.overdue || []), ...(data.due_today || [])].reduce(
+    (sum, task) => sum + Number(task.estimated_hours),
+    0,
+  )
+
+  const nextEvents = events
+    .filter((ev) => ev.event_date >= data.today)
+    .sort((a, b) => a.event_date.localeCompare(b.event_date))
+    .slice(0, 3)
+
+  return (
+    <aside className="today-aside" aria-label="Resumen">
+      <section className="card-pro">
+        <div className="card-pro-header">
+          <h3>Resumen</h3>
+        </div>
+        {GROUPS.map((group) => (
+          <div key={group.key} className="info-row">
+            <span className="info-key">
+              {group.key === 'upcoming' ? `${group.title} (${windowDays} días)` : group.title}
+            </span>
+            <span className="info-val">{data[group.key]?.length || 0}</span>
+          </div>
+        ))}
+        <div className="info-row">
+          <span className="info-key">Horas por atender</span>
+          <span className="info-val">{hoursFormatter.format(pendingHours)} h</span>
+        </div>
+      </section>
+
+      <section className="card-pro">
+        <div className="card-pro-header">
+          <h3>Próximos eventos</h3>
+        </div>
+        {nextEvents.length === 0 ? (
+          <p className="endpoint-hint">No hay eventos próximos.</p>
+        ) : (
+          <ul className="plain-list">
+            {nextEvents.map((ev) => (
+              <li key={ev.id} className="info-row">
+                <Link to={`/evento/${ev.id}`} className="today-card-event truncate">
+                  {ev.name}
+                </Link>
+                <span className="info-val">{formatDateFromISO(ev.event_date)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </aside>
+  )
+}
+
 export default function Today() {
   const [searchParams, setSearchParams] = useSearchParams()
   const eventFilter = searchParams.get('event') || ''
@@ -317,8 +371,13 @@ export default function Today() {
           Hoy es <strong>{formatLongDate(data.today)}</strong>
         </p>
       )}
-
-      <div aria-busy={isLoading}>{content}</div>
+      
+      <div className="today-layout">
+        <div aria-busy={isLoading}>{content}</div>
+        {data?.today && !error && (
+          <TodaySummary data={data} events={events} windowDays={windowDays} />
+        )}
+      </div>
     </div>
   )
 }
