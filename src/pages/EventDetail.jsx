@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import OverloadConflictModal from '../components/OverloadConflictModal'
 import {
   IconMapPin,
   IconCalendar,
@@ -84,6 +85,8 @@ function buildSubtaskFormValues(task) {
 export default function EventDetail() {
   const { id } = useParams()
   const [event, setEvent] = useState(null)
+
+  const [conflictState, setConflictState] = useState(null)
   // Cada intento de carga tiene una clave; "cargando" = la respuesta de ese intento aún no llega
   const [attempt, setAttempt] = useState(0)
   const loadKey = `${id}|${attempt}`
@@ -217,7 +220,6 @@ export default function EventDetail() {
     try {
       const data = await apiFetch(`/api/events/${id}/subtasks/`, { method: 'POST', body: payload })
 
-      // Agregar la subtarea creada al estado local, sin volver a pedir el evento al backend
       setEvent((prev) => ({
         ...prev,
         subtasks: [...(Array.isArray(prev.subtasks) ? prev.subtasks : []), data],
@@ -229,22 +231,31 @@ export default function EventDetail() {
         details: data,
       })
 
-      // Limpiar el formulario para cargar la siguiente gestión
       setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
       setSubtaskErrors({})
       setSubtaskTouched({})
-
-      // Cerrar el formulario
       setShowSubtaskForm(false)
       
     } catch (err) {
-      // En un fallo de conexión no se limpia el formulario: lo escrito se conserva
       console.error(err)
-      setFeedback({
-        type: 'error',
-        message:
-          err.message,
-      })
+
+      if (err.status === 409 && err.details) {
+        setConflictState({
+          subtask: {
+            ...payload,
+            name: subtaskForm.name,
+            event_id: id, // ID del evento para el POST
+          },
+          conflictData: err.details,
+          eventDate: event.event_date,
+          isNew: true, // Marca que es una tarea nueva
+        })
+      } else {
+        setFeedback({
+          type: 'error',
+          message: err.message,
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -497,8 +508,7 @@ export default function EventDetail() {
     try {
       const data = await apiFetch(`/api/subtasks/${subtaskId}/`, { method: 'PATCH', body: payload })
 
-      // Reemplaza solo esa gestión dentro de event.subtasks buscándola por id,
-      // sin volver a pedir el evento completo al backend
+      // Reemplaza solo esa gestión dentro de event.subtasks
       setEvent((prev) => ({
         ...prev,
         subtasks: (Array.isArray(prev.subtasks) ? prev.subtasks : []).map((subtask) =>
@@ -514,16 +524,30 @@ export default function EventDetail() {
         details: data,
       })
     } catch (err) {
-      // En un fallo de conexión no se cierra el formulario: lo escrito se conserva
       console.error(err)
-      updateEditingSubtask(subtaskId, {
-        feedback: {
-          type: 'error',
-          message:
-            err.message,
-          details: null,
-        },
-      })
+
+      if (err.status === 409 && err.details) {
+        // Tomamos la tarea original y le combinamos lo que acabas de escribir en el formulario (las 4h, el nombre, etc.)
+        const currentSubtask = {
+          ...(event?.subtasks?.find((s) => s.id === subtaskId) || {}),
+          ...entry.form,
+          id: subtaskId,
+        }
+
+        setConflictState({
+          subtask: currentSubtask,
+          conflictData: err.details,
+          eventDate: event.event_date,
+        })
+      } else {
+        updateEditingSubtask(subtaskId, {
+          feedback: {
+            type: 'error',
+            message: err.message,
+            details: null,
+          },
+        })
+      }
     } finally {
       updateEditingSubtask(subtaskId, { isSubmitting: false })
     }
@@ -1541,6 +1565,42 @@ export default function EventDetail() {
         confirmDisabled={isDeleting}
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+      />
+      {/* Modal de resolución de conflicto de sobrecarga */}
+      <OverloadConflictModal
+        isOpen={Boolean(conflictState)}
+        conflictData={conflictState?.conflictData}
+        subtask={conflictState?.subtask}
+        eventDate={conflictState?.eventDate}
+        isNew={Boolean(conflictState?.isNew)}
+        onResolved={(resultTask, message) => {
+          const wasNew = conflictState?.isNew
+          setConflictState(null)
+
+          if (wasNew) {
+            // Si era nueva, la añadimos a la lista y cerramos el formulario de creación
+            setEvent((prev) => ({
+              ...prev,
+              subtasks: [...(Array.isArray(prev.subtasks) ? prev.subtasks : []), resultTask],
+            }))
+            setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
+            setShowSubtaskForm(false)
+          } else {
+            // Si era edición, reemplazamos la tarea existente
+            setEvent((prev) => ({
+              ...prev,
+              subtasks: prev.subtasks.map((s) => (s.id === resultTask.id ? resultTask : s)),
+            }))
+            handleCancelEditSubtask(resultTask.id)
+          }
+
+          setFeedback({
+            type: 'success',
+            message,
+            details: resultTask,
+          })
+        }}
+        onCancel={() => setConflictState(null)}
       />
     </div>
   )

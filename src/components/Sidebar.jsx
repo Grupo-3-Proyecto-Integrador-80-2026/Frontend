@@ -1,9 +1,16 @@
 import { NavLink } from 'react-router-dom'
 import { useState } from 'react'
-import { IconCalendar, IconClock, IconPlus, IconCalendarDays, IconUser, IconLogOut } from './Icons'
+import {
+  IconCalendar,
+  IconClock,
+  IconPlus,
+  IconCalendarDays,
+  IconUser,
+  IconLogOut,
+} from './Icons'
 import { useAuth } from '../auth/AuthContext'
+import DailyLimitModal from './DailyLimitModal'
 
-// Un único acceso por destino: "Crear evento" ya no se repite como botón aparte
 const NAV_ITEMS = [
   { to: '/hoy', label: 'Hoy', Icon: IconClock },
   { to: '/crear', label: 'Crear evento', Icon: IconPlus },
@@ -13,6 +20,9 @@ const NAV_ITEMS = [
 export default function Sidebar({ isMobileOpen, onCloseMobile }) {
   const { user, logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  // El useState va AQUÍ ADENTRO:
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false)
+
   const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email
 
   const handleLogout = async () => {
@@ -22,7 +32,7 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
 
   return (
     <>
-      {/* Mobile backdrop */}
+      {/* Backdrop móvil */}
       {isMobileOpen && (
         <div
           className="mobile-backdrop"
@@ -68,7 +78,7 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
           </nav>
         </div>
 
-        {/* Perfil del organizador autenticado (US-11) */}
+        {/* Perfil del organizador autenticado con configuración US-12 */}
         <div className="sidebar-bottom">
           <div className="profile-card">
             <div className="profile-avatar" aria-hidden="true">
@@ -76,9 +86,20 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
             </div>
             <div className="profile-info">
               <p className="profile-name">{fullName}</p>
-              <p className="profile-limit">
-                Límite: {user?.daily_hours_limit ?? 6} h de gestión al día
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <p className="profile-limit" style={{ margin: 0 }}>
+                  Límite: {user?.daily_hours_limit ?? 6} h/día
+                </p>
+                <button
+                  type="button"
+                  className="btn-sec-pro btn-small"
+                  style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', cursor: 'pointer' }}
+                  onClick={() => setIsLimitModalOpen(true)}
+                  title="Cambiar límite diario de horas (US-12)"
+                >
+                  Cambiar
+                </button>
+              </div>
             </div>
             <button
               type="button"
@@ -93,6 +114,12 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
           </div>
         </div>
       </aside>
+
+      {/* Modal para configurar límite diario (US-12) */}
+      <DailyLimitModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+      />
     </>
   )
 }
