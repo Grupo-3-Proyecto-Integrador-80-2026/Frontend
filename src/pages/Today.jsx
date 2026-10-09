@@ -12,6 +12,7 @@ import {
 import SortRuleHelp from '../components/SortRuleHelp'
 import StatusMessage from '../components/StatusMessage'
 import DateWarning from '../components/DateWarning'
+import OverloadConflictModal from '../components/OverloadConflictModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
 import { apiFetch } from '../api/client'
 import { daysBetween, formatDateFromISO, getOptionLabel, isAfterEventDate, TASK_STATUSES } from '../utils/validators'
@@ -60,7 +61,7 @@ function formatLongDate(isodate) {
   return `${weekday}, ${formatDateFromISO(isodate)}`
 }
 
-function TodayCard({ task, group, today, eventDate }) {
+function TodayCard({ task, group, today, eventDate, onReschedule }) {
   const relative = describeRelativeDate(group.key, task.scheduled_date, today)
   const hours = hoursFormatter.format(Number(task.estimated_hours))
   const afterEvent = isAfterEventDate(task, eventDate)
@@ -79,13 +80,21 @@ function TodayCard({ task, group, today, eventDate }) {
       </Link>
 
       <div className="today-card-meta">
-        <span className="today-meta-item">
+        {/* Selector de reprogramación rápido */}
+        <label className="today-meta-item" style={{ cursor: 'pointer' }} title="Cambiar fecha objetivo">
           <IconCalendar size={14} />
           <span>
             {formatDateFromISO(task.scheduled_date)}
             {relative && <span className="today-meta-relative"> · {relative}</span>}
           </span>
-        </span>
+          <input
+            type="date"
+            value={task.scheduled_date}
+            onChange={(e) => onReschedule(task, e.target.value)}
+            style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+          />
+        </label>
+
         <span className="today-meta-item">
           <IconClock size={14} />
           <span>{hours} h estimadas</span>
@@ -313,6 +322,73 @@ export default function Today() {
     content = renderGroups()
   }
 
+  const [conflictState, setConflictState] = useState(null)
+  // { subtask, conflictData, eventDate }
+
+  // Notificación tipo toast con opción de "Deshacer" (US-06)
+  const [toast, setToast] = useState(null)
+  // { message, subtask, previousDate, timerId }
+
+  const showUndoToast = (subtask, previousDate, message) => {
+    if (toast?.timerId) clearTimeout(toast.timerId)
+
+    const timerId = setTimeout(() => {
+      setToast(null)
+    }, 6000)
+
+    setToast({
+      message,
+      subtask,
+      previousDate,
+      timerId,
+    })
+  }
+
+  const handleUndo = async () => {
+    if (!toast) return
+    const { subtask, previousDate, timerId } = toast
+    clearTimeout(timerId)
+    setToast(null)
+
+    try {
+      await apiFetch(`/api/subtasks/${subtask.id}/`, {
+        method: 'PATCH',
+        body: { scheduled_date: previousDate, confirm_overload: true },
+      })
+      loadToday()
+    } catch (err) {
+      console.error('Error al deshacer reprogramación:', err)
+    }
+  }
+
+  // Función para reprogramar una subtarea
+  const handleReschedule = async (task, newDate) => {
+    const previousDate = task.scheduled_date
+    if (newDate === previousDate) return
+
+    try {
+      const updated = await apiFetch(`/api/subtasks/${task.id}/`, {
+        method: 'PATCH',
+        body: { scheduled_date: newDate },
+      })
+
+      // Actualizar vista reactivamente y mostrar toast con "Deshacer"
+      loadToday()
+      showUndoToast(task, previousDate, `Gestión reprogramada al ${formatDateFromISO(newDate)}`)
+    } catch (err) {
+      if (err.status === 409 && err.details) {
+        // CONFLICTO DETECTADO (US-07) -> Abrir modal asistido
+        setConflictState({
+          subtask: task,
+          conflictData: err.details,
+          eventDate: eventDateById.get(task.event_id),
+        })
+      } else {
+        alert(err.message || 'No pudimos reprogramar la gestión.')
+      }
+    }
+  }
+
   return (
     <div className="today-page">
       <div className="today-toolbar">
@@ -378,6 +454,49 @@ export default function Today() {
           <TodaySummary data={data} events={events} windowDays={windowDays} />
         )}
       </div>
+      {/* Toast emergente de confirmación con Deshacer (US-06) */}
+      {toast && (
+        <div
+          className="banner-alert banner-success"
+          role="status"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 9999,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}
+        >
+          <IconCheckCircle size={18} className="icon-emerald" />
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            className="btn-sec-pro btn-small"
+            onClick={handleUndo}
+            style={{ marginLeft: '8px' }}
+          >
+            Deshacer
+          </button>
+        </div>
+      )}
+
+      {/* Modal de resolución de conflicto de sobrecarga (US-07 & US-08) */}
+      <OverloadConflictModal
+        isOpen={Boolean(conflictState)}
+        conflictData={conflictState?.conflictData}
+        subtask={conflictState?.subtask}
+        eventDate={conflictState?.eventDate}
+        onResolved={(updatedTask, message) => {
+          setConflictState(null)
+          loadToday()
+          showUndoToast(
+            updatedTask,
+            conflictState?.subtask?.scheduled_date,
+            message
+          )
+        }}
+        onCancel={() => setConflictState(null)}
+      />
     </div>
   )
 }

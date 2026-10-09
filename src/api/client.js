@@ -65,14 +65,16 @@ export function setUnauthorizedHandler(handler) {
 export class ApiError extends Error {
   /**
    * @param {string} message - Mensaje en español para la UI.
-   * @param {number|null} status - Código HTTP (null si no hubo respuesta).
-   * @param {Object<string, string>} fieldErrors - Errores por campo, ya aplanados.
+   * @param {number|null} status - Código HTTP.
+   * @param {Object<string, string>} fieldErrors - Errores por campo aplanados.
+   * @param {any} details - Objeto original de detalles (útil para conflictos 409).
    */
-  constructor(message, status = null, fieldErrors = {}) {
+  constructor(message, status = null, fieldErrors = {}, details = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.fieldErrors = fieldErrors
+    this.details = details
   }
 }
 
@@ -163,9 +165,9 @@ export async function apiFetch(
     const message =
       response.status === 400 && fieldSummary
         ? `${data?.error || STATUS_MESSAGES[400]} ${fieldSummary}`
-        : STATUS_MESSAGES[response.status] || data?.error || SERVER_ERROR_MESSAGE
+        : data?.error || STATUS_MESSAGES[response.status] || SERVER_ERROR_MESSAGE
 
-    throw new ApiError(message, response.status, fieldErrors)
+    throw new ApiError(message, response.status, fieldErrors, data?.details)
   }
 
   return data
