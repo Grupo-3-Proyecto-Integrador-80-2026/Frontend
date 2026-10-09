@@ -20,10 +20,54 @@ export default function OverloadConflictModal({
 }) {
   if (!isOpen || !conflictData) return null
 
-  // Helper que decide si hace POST o PATCH:
+  const limitHours = conflictData.limit_hours ?? 6
+  const plannedHours = conflictData.planned_hours ?? 0
+  const attemptedHours = Number(conflictData.subtask_hours || subtask?.estimated_hours || 1)
+  const maxAllowedSameDay = Math.max(0, limitHours - plannedHours)
+
+  // Estados del modal:
+  const [selectedAction, setSelectedAction] = useState('move')
+  const [targetDate, setTargetDate] = useState(
+    conflictData.suggested_dates?.[0] || conflictData.date || todayISO()
+  )
+
+  const defaultSuggestedHours =
+    maxAllowedSameDay > 0
+      ? String(maxAllowedSameDay)
+      : String(Math.max(0.5, attemptedHours - 0.5))
+
+  const [reducedHours, setReducedHours] = useState(defaultSuggestedHours)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(null)
+
+  // Cálculo dinámico en vivo
+  const liveCalculation = useMemo(() => {
+    if (selectedAction === 'move') {
+      const isSameDate = targetDate === conflictData.date
+      const projected = isSameDate ? plannedHours + attemptedHours : attemptedHours
+      const isOverloaded = isSameDate && projected > limitHours
+      return {
+        date: targetDate,
+        hours: attemptedHours,
+        projected,
+        isOverloaded,
+      }
+    } else {
+      const numHours = Number(reducedHours) || 0
+      const projected = plannedHours + numHours
+      const isOverloaded = projected > limitHours || numHours <= 0 || numHours > attemptedHours
+      return {
+        date: conflictData.date,
+        hours: numHours,
+        projected,
+        isOverloaded,
+      }
+    }
+  }, [selectedAction, targetDate, reducedHours, conflictData, plannedHours, attemptedHours, limitHours])
+
+  // Helper que decide si hace POST o PATCH
   const saveSubtask = async (body) => {
     if (isNew) {
-      // Al crear: POST a /api/events/:id/subtasks/
       const eventId = subtask?.event_id
       const payload = {
         name: subtask?.name,
@@ -37,7 +81,6 @@ export default function OverloadConflictModal({
         body: payload,
       })
     } else {
-      // Al editar: PATCH a /api/subtasks/:id/
       return await apiFetch(`/api/subtasks/${subtask.id}/`, {
         method: 'PATCH',
         body,
@@ -171,7 +214,7 @@ export default function OverloadConflictModal({
           </button>
         </div>
 
-        {/* Mensaje claro con las horas que intentaste asignar (las 4h) */}
+        {/* Mensaje de advertencia sin tecnicismos */}
         <div
           className="banner-alert banner-warning"
           style={{ margin: '12px 0', borderRadius: '8px', padding: '12px' }}

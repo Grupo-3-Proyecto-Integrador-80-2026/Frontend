@@ -59,15 +59,21 @@ export default function AuthProvider({ children }) {
     try {
       await apiFetch('/api/auth/logout/', { method: 'POST', notifyUnauthorized: false })
     } finally {
-      // Aunque falle la red, en este navegador la sesión se da por cerrada
       setCsrfToken(null)
       setSession({ status: 'anonymous', user: null, expired: false })
     }
   }, [])
 
+  const updateUser = useCallback((userData) => {
+    setSession((prev) => ({
+      ...prev,
+      user: { ...prev.user, ...userData },
+    }))
+  }, [])
+
   const value = useMemo(
-    () => ({ ...session, login, register, logout }),
-    [session, login, register, logout]
+    () => ({ ...session, login, register, logout, updateUser }),
+    [session, login, register, logout, updateUser]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
