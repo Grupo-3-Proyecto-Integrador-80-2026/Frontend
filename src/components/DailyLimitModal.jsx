@@ -50,23 +50,33 @@ export default function DailyLimitModal({ isOpen, onClose }) {
         body: { daily_hours_limit: num },
       })
 
-      // Si updateUser existe en el AuthContext lo ejecuta; si no, actualiza el objeto user
       if (typeof updateUser === 'function') {
         updateUser({ daily_hours_limit: data.daily_hours_limit })
       } else if (user) {
         user.daily_hours_limit = data.daily_hours_limit
       }
 
-      setFeedback({
-        type: 'success',
-        message: 'Límite diario actualizado correctamente.',
-      })
+      const wasReduced = num < initialValue
 
-      setTimeout(() => {
-        onClose()
-      }, 1000)
+      if (wasReduced) {
+        setFeedback({
+          type: 'warning',
+          message: `Redujiste tu límite a ${num}h/día. Si ya tienes días con más de ${num}h planificadas, el sistema te advertirá sobrecarga cuando reprogrames o muevas tareas en esas fechas.`,
+        })
+        setTimeout(() => {
+          onClose()
+        }, 10000)
+      } else {
+        setFeedback({
+          type: 'success',
+          message: `Límite diario actualizado a ${num}h correctamente.`,
+        })
+        setTimeout(() => {
+          onClose()
+        }, 12000)
+      }
+
     } catch (err) {
-      // Muestra el mensaje exacto que respondió el servidor
       const serverMsg =
         err.details?.daily_hours_limit?.[0] ||
         err.message ||
@@ -107,6 +117,7 @@ export default function DailyLimitModal({ isOpen, onClose }) {
           reprogramas gestiones y superas este límite, el sistema te advertirá sobre la sobrecarga.
         </p>
 
+        {/* Banner de Éxito (Verde) */}
         {feedback.type === 'success' && (
           <div className="banner-alert banner-success" role="status" style={{ margin: '12px 0' }}>
             <IconCheckCircle size={18} className="icon-emerald" />
@@ -114,6 +125,34 @@ export default function DailyLimitModal({ isOpen, onClose }) {
           </div>
         )}
 
+        {feedback.type === 'warning' && (
+          <div
+            className="banner-alert banner-warning"
+            role="status"
+            style={{
+              margin: '12px 0',
+              background: '#fffbeb',
+              border: '1px solid #fcd34d',
+              padding: '10px 12px',
+              borderRadius: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <IconAlertTriangle
+                size={18}
+                style={{ color: '#d97706', flexShrink: 0, marginTop: '2px' }}
+              />
+              <div style={{ fontSize: '12px', color: '#92400e', lineHeight: '1.4' }}>
+                <strong style={{ display: 'block', color: '#b45309', marginBottom: '2px' }}>
+                  Atención: disponibilidad reducida
+                </strong>
+                <span>{feedback.message}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Banner de Error (Rojo) */}
         {feedback.type === 'error' && (
           <div className="banner-alert banner-error" role="alert" style={{ margin: '12px 0' }}>
             <IconAlertTriangle size={18} className="icon-rose" />
