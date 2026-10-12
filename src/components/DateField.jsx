@@ -3,16 +3,8 @@ import { IconCalendar } from './Icons'
 import { formatDateFromISO } from '../utils/validators'
 
 /**
- * Campo de fecha que muestra el valor en el formato de la app (DD/Mmm/AAAA, p. ej.
- * 11/Sep/2026) y usa el calendario nativo del navegador para elegirla.
- *
- * El <input type="date"> nativo muestra la fecha según el idioma del navegador y no se
- * puede formatear; por eso queda oculto y solo aporta el calendario, min/max y el valor ISO.
- *
- * - Clic, Enter, Espacio o flecha abajo abren el calendario.
- * - Supr o Retroceso borran la fecha.
- * - onChange/onBlur reciben { target: { name, value } } con el valor AAAA-MM-DD, igual
- *   que un input normal, así que los formularios no cambian.
+ * Campo de fecha que muestra el valor en el formato de la app (DD/Mmm/AAAA)
+ * y usa el calendario nativo del navegador para elegirla.
  */
 export default function DateField({
   id,
@@ -23,7 +15,8 @@ export default function DateField({
   onChange,
   onBlur,
   className = '',
-  required,
+  required = false,
+  disabled = false,
   'aria-invalid': ariaInvalid,
   'aria-describedby': ariaDescribedBy,
 }) {
@@ -31,18 +24,19 @@ export default function DateField({
   const hintId = useId()
 
   const openPicker = () => {
+    if (disabled) return
     const input = nativeRef.current
     if (!input) return
     try {
       input.showPicker()
     } catch {
-      // Navegadores sin showPicker: se enfoca el control nativo para usar su calendario
       input.focus()
       input.click()
     }
   }
 
   const handleKeyDown = (e) => {
+    if (disabled) return
     if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
       e.preventDefault()
       openPicker()
@@ -53,11 +47,12 @@ export default function DateField({
   }
 
   return (
-    <div className="date-field">
+    <div className={`date-field ${disabled ? 'date-field-disabled' : ''}`}>
       <input
         id={id}
         type="text"
         readOnly
+        disabled={disabled}
         value={value ? formatDateFromISO(value) : ''}
         placeholder="DD/Mmm/AAAA"
         className={`${className} date-field-display`}
@@ -81,6 +76,7 @@ export default function DateField({
         value={value || ''}
         min={min}
         max={max}
+        disabled={disabled}
         onChange={onChange}
         className="date-field-native"
         tabIndex={-1}

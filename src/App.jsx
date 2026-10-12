@@ -6,6 +6,7 @@ import Today from './pages/Today'
 import Events from './pages/Events'
 import CreateEvent from './pages/CreateEvent'
 import EventDetail from './pages/EventDetail'
+import Progress from './pages/Progress'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ProtectedRoute, { PublicOnlyRoute } from './auth/ProtectedRoute'
@@ -31,13 +32,18 @@ function getHeaderCopy(pathname) {
       description: 'Todos los eventos que estás organizando.',
     }
   }
+  if (pathname === '/progreso') {
+    return {
+      title: 'Progreso de preparación',
+      description: 'Porcentaje de avance y gestiones completadas por evento.',
+    }
+  }
   return {
     title: 'Hoy',
     description: 'Las gestiones que necesitan tu atención, de la más urgente a la menos urgente.',
   }
 }
 
-// Estructura de las páginas privadas: barra lateral + encabezado + contenido
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const location = useLocation()
@@ -50,7 +56,6 @@ function AppLayout() {
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
-      {/* Panel Principal */}
       <main className="main-viewport">
         <Header
           title={title}
@@ -69,17 +74,16 @@ function AppLayout() {
 function App() {
   return (
     <Routes>
-      {/* Públicas: si ya hay sesión, redirigen a /hoy */}
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<Login />} />
         <Route path="/registro" element={<Register />} />
       </Route>
 
-      {/* Privadas (US-11): sin sesión redirigen a /login */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/hoy" element={<Today />} />
           <Route path="/eventos" element={<Events />} />
+          <Route path="/progreso" element={<Progress />} />
           <Route path="/crear" element={<CreateEvent />} />
           <Route path="/evento/:id" element={<EventDetail />} />
         </Route>

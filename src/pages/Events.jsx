@@ -7,7 +7,6 @@ import { apiFetch } from '../api/client'
 import { formatDateFromISO, getOptionLabel, EVENT_TYPES, EVENT_STATUSES } from '../utils/validators'
 
 export default function Events() {
-  // Cada intento de carga tiene un número; "cargando" = la respuesta de ese intento aún no llega
   const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState({ attempt: -1, events: [], error: null })
 
@@ -24,15 +23,6 @@ export default function Events() {
   const isLoading = result.attempt !== attempt
   const { events, error } = result
   const loadEvents = () => setAttempt((n) => n + 1)
-
-  // Al volver a la pestaña se recargan los datos: pudieron cambiar en otra pestaña o dispositivo
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') setAttempt((n) => n + 1)
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [])
 
   if (isLoading) {
     return (
