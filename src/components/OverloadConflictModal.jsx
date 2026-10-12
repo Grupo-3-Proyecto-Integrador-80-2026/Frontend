@@ -25,8 +25,10 @@ export default function OverloadConflictModal({
   const attemptedHours = Number(conflictData.subtask_hours || subtask?.estimated_hours || 1)
   const maxAllowedSameDay = Math.max(0, limitHours - plannedHours)
 
-  // Estados del modal:
-  const [selectedAction, setSelectedAction] = useState('move')
+  // Si la tarea individual supera el límite total diario, no cabe en ningún día sin reducir horas
+  const taskExceedsLimitEntirely = attemptedHours > limitHours
+
+  const [selectedAction, setSelectedAction] = useState(taskExceedsLimitEntirely ? 'reduce' : 'move')
   const [targetDate, setTargetDate] = useState(
     conflictData.suggested_dates?.[0] || conflictData.date || todayISO()
   )
@@ -40,32 +42,59 @@ export default function OverloadConflictModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
-  // Cálculo dinámico en vivo
+  // Cálculo en vivo corregido
   const liveCalculation = useMemo(() => {
     if (selectedAction === 'move') {
+      // Si la tarea sola ya supera el límite diario, moverla a otro día NO la soluciona
+      if (taskExceedsLimitEntirely) {
+        return {
+          date: targetDate,
+          hours: attemptedHours,
+          projected: attemptedHours,
+          isOverloaded: true,
+          message: `Esta gestión tiene ${attemptedHours}h y supera tu límite total de ${limitHours}h/día. No cabrá en ningún día a menos que reduzcas sus horas.`,
+        }
+      }
+
       const isSameDate = targetDate === conflictData.date
       const projected = isSameDate ? plannedHours + attemptedHours : attemptedHours
-      const isOverloaded = isSameDate && projected > limitHours
+      const isOverloaded = projected > limitHours
+
       return {
         date: targetDate,
         hours: attemptedHours,
         projected,
         isOverloaded,
+        message: isOverloaded
+          ? `Carga resultante: ${projected}h (supera el límite de ${limitHours}h)`
+          : `Carga resultante viable: ${projected}h de ${limitHours}h permitidas`,
       }
     } else {
       const numHours = Number(reducedHours) || 0
       const projected = plannedHours + numHours
       const isOverloaded = projected > limitHours || numHours <= 0 || numHours > attemptedHours
+
       return {
         date: conflictData.date,
         hours: numHours,
         projected,
         isOverloaded,
+        message: isOverloaded
+          ? `Carga resultante: ${projected}h (supera el límite de ${limitHours}h o valor no válido)`
+          : `Carga resultante viable: ${projected}h de ${limitHours}h permitidas`,
       }
     }
-  }, [selectedAction, targetDate, reducedHours, conflictData, plannedHours, attemptedHours, limitHours])
+  }, [
+    selectedAction,
+    targetDate,
+    reducedHours,
+    conflictData,
+    plannedHours,
+    attemptedHours,
+    limitHours,
+    taskExceedsLimitEntirely,
+  ])
 
-  // Helper que decide si hace POST o PATCH
   const saveSubtask = async (body) => {
     if (isNew) {
       const eventId = subtask?.event_id
@@ -88,7 +117,6 @@ export default function OverloadConflictModal({
     }
   }
 
-  // 1. Resolver moviendo a otra fecha
   const handleResolveByMove = async (dateToUse) => {
     setIsSubmitting(true)
     setErrorMessage(null)
@@ -113,7 +141,6 @@ export default function OverloadConflictModal({
     }
   }
 
-  // 2. Resolver reduciendo horas en la misma fecha
   const handleResolveByReduce = async () => {
     const numHours = Number(reducedHours)
     if (numHours <= 0) {
@@ -146,7 +173,6 @@ export default function OverloadConflictModal({
     }
   }
 
-  // 3. Posponer gestión
   const handlePostpone = async () => {
     setIsSubmitting(true)
     setErrorMessage(null)
@@ -165,7 +191,6 @@ export default function OverloadConflictModal({
     }
   }
 
-  // 4. Forzar sobrecarga (confirm_overload: true)
   const handleForceSave = async () => {
     setIsSubmitting(true)
     setErrorMessage(null)
@@ -190,7 +215,6 @@ export default function OverloadConflictModal({
   return (
     <div className="confirm-dialog-overlay" role="dialog" aria-modal="true">
       <div className="confirm-dialog" style={{ maxWidth: '540px', textAlign: 'left' }}>
-        {/* Cabecera */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
           <div className="confirm-dialog-icon confirm-dialog-icon-danger">
             <IconAlertTriangle size={22} />
@@ -208,13 +232,11 @@ export default function OverloadConflictModal({
             className="btn-cancel-pro btn-small"
             onClick={onCancel}
             aria-label="Cerrar modal"
-            disabled={isSubmitting}
           >
             <IconX size={16} />
           </button>
         </div>
 
-        {/* Mensaje de advertencia sin tecnicismos */}
         <div
           className="banner-alert banner-warning"
           style={{ margin: '12px 0', borderRadius: '8px', padding: '12px' }}
@@ -233,7 +255,6 @@ export default function OverloadConflictModal({
           </div>
         </div>
 
-        {/* Error si falló el guardado */}
         {errorMessage && (
           <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '12px' }}>
             <IconAlertTriangle size={16} className="icon-rose" />
@@ -241,7 +262,6 @@ export default function OverloadConflictModal({
           </div>
         )}
 
-        {/* Pestañas de Alternativas */}
         <div style={{ margin: '16px 0 12px 0' }}>
           <span className="field-label" style={{ marginBottom: '8px', display: 'block' }}>
             ¿Cómo deseas resolver este conflicto?
@@ -266,67 +286,73 @@ export default function OverloadConflictModal({
             </button>
           </div>
 
-          {/* Opción 1: Mover */}
           {selectedAction === 'move' && (
             <div
               style={{
-                background: 'var(--bg-subtle, #f8fafc)',
+                background: '#f8fafc',
                 padding: '12px',
                 borderRadius: '8px',
-                border: '1px solid var(--border-color, #e2e8f0)',
+                border: '1px solid #e2e8f0',
               }}
             >
-              <label className="field-label" style={{ fontSize: '12px' }}>
-                Días sugeridos donde caben tus <strong>{attemptedHours}h</strong> sin sobrecargar:
-              </label>
-
-              {conflictData.suggested_dates && conflictData.suggested_dates.length > 0 ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '8px 0 12px 0' }}>
-                  {conflictData.suggested_dates.map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={targetDate === d ? 'btn-submit-pro btn-small' : 'btn-sec-pro btn-small'}
-                      style={{ fontSize: '12px', padding: '4px 10px' }}
-                      onClick={() => setTargetDate(d)}
-                      disabled={isSubmitting}
-                    >
-                      <IconCalendar size={13} style={{ marginRight: '4px' }} />
-                      {formatDateFromISO(d)}
-                    </button>
-                  ))}
+              {taskExceedsLimitEntirely ? (
+                <div style={{ color: '#b45309', fontSize: '12px', lineHeight: 1.4 }}>
+                  <strong>Aviso:</strong> Esta gestión sola dura <strong>{attemptedHours}h</strong>, lo cual supera tu límite diario completo de <strong>{limitHours}h</strong>. Cambiarla de día no resolverá el problema a menos que reduzcas sus horas en la pestaña "2. Reducir horas".
                 </div>
               ) : (
-                <p className="field-hint" style={{ margin: '6px 0 10px 0' }}>
-                  No hay días sugeridos automáticos. Elige otra fecha en el calendario:
-                </p>
-              )}
+                <>
+                  <label className="field-label" style={{ fontSize: '12px' }}>
+                    Días sugeridos donde caben tus <strong>{attemptedHours}h</strong> sin sobrecargar:
+                  </label>
 
-              <div className="field-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="conflict-target-date" className="field-label" style={{ fontSize: '12px' }}>
-                  O elige otra fecha en el calendario:
-                </label>
-                <DateField
-                  id="conflict-target-date"
-                  name="target_date"
-                  value={targetDate}
-                  min={todayISO()}
-                  max={eventDate}
-                  onChange={(e) => setTargetDate(e.target.value)}
-                  disabled={isSubmitting}
-                />
-              </div>
+                  {conflictData.suggested_dates && conflictData.suggested_dates.length > 0 ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '8px 0 12px 0' }}>
+                      {conflictData.suggested_dates.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          className={targetDate === d ? 'btn-submit-pro btn-small' : 'btn-sec-pro btn-small'}
+                          style={{ fontSize: '12px', padding: '4px 10px' }}
+                          onClick={() => setTargetDate(d)}
+                          disabled={isSubmitting}
+                        >
+                          <IconCalendar size={13} style={{ marginRight: '4px' }} />
+                          {formatDateFromISO(d)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="field-hint" style={{ margin: '6px 0 10px 0' }}>
+                      No hay días sugeridos automáticos. Elige otra fecha en el calendario:
+                    </p>
+                  )}
+
+                  <div className="field-group" style={{ marginBottom: 0 }}>
+                    <label htmlFor="conflict-target-date" className="field-label" style={{ fontSize: '12px' }}>
+                      O elige otra fecha en el calendario:
+                    </label>
+                    <DateField
+                      id="conflict-target-date"
+                      name="target_date"
+                      value={targetDate}
+                      min={todayISO()}
+                      max={eventDate}
+                      onChange={(e) => setTargetDate(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
-          {/* Opción 2: Reducir horas */}
           {selectedAction === 'reduce' && (
             <div
               style={{
-                background: 'var(--bg-subtle, #f8fafc)',
+                background: '#f8fafc',
                 padding: '12px',
                 borderRadius: '8px',
-                border: '1px solid var(--border-color, #e2e8f0)',
+                border: '1px solid #e2e8f0',
               }}
             >
               <div className="field-group" style={{ marginBottom: 0 }}>
@@ -346,7 +372,7 @@ export default function OverloadConflictModal({
                     style={{ maxWidth: '120px' }}
                     disabled={isSubmitting}
                   />
-                  <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>
+                  <span style={{ fontSize: '13px', color: '#64748b' }}>
                     horas estimadas
                   </span>
                 </div>
@@ -386,16 +412,11 @@ export default function OverloadConflictModal({
             ) : (
               <IconCheckCircle size={16} />
             )}
-            <span>
-              {liveCalculation.isOverloaded
-                ? `Carga resultante: ${liveCalculation.projected}h (supera el límite de ${limitHours}h)`
-                : `Carga resultante viable: ${liveCalculation.projected}h de ${limitHours}h permitidas`}
-            </span>
+            <span>{liveCalculation.message}</span>
           </div>
           <strong>{liveCalculation.isOverloaded ? 'Conflicto persistente' : 'Conflicto resuelto'}</strong>
         </div>
 
-        {/* Botones de acción */}
         <div
           className="confirm-dialog-actions"
           style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}
@@ -406,7 +427,6 @@ export default function OverloadConflictModal({
               className="btn-sec-pro btn-small"
               onClick={handlePostpone}
               disabled={isSubmitting}
-              title="Mover de estado a pospuesta (no sumará carga)"
             >
               Posponer gestión
             </button>
@@ -415,7 +435,6 @@ export default function OverloadConflictModal({
               className="btn-danger-ghost btn-small"
               onClick={handleForceSave}
               disabled={isSubmitting}
-              title="Guardar de todas formas a pesar de la sobrecarga"
             >
               Ignorar y forzar
             </button>
@@ -426,7 +445,6 @@ export default function OverloadConflictModal({
               type="button"
               className="btn-cancel-pro"
               onClick={onCancel}
-              disabled={isSubmitting}
             >
               Cancelar
             </button>

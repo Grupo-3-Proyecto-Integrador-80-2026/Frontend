@@ -1458,22 +1458,31 @@ textarea {
 .today-group-upcoming .today-group-title { color: var(--slate-900); }
 .today-group-upcoming .today-group-title svg { color: var(--urgency-upcoming); }
 
+/* Badge contador en cada columna */
 .today-group-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.5rem;
-  height: 1.5rem;
-  padding: 0 0.4rem;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
   border-radius: 999px;
-  font-size: var(--text-xs);
-  font-weight: 800;
-  color: #ffffff;
+  color: #ffffff !important; /* Blanco nítido */
+  min-width: 20px;
+  text-align: center;
+  line-height: 1.4;
 }
 
-.today-group-overdue .today-group-count { background-color: var(--urgency-overdue); }
-.today-group-due_today .today-group-count { background-color: var(--urgency-today); }
-.today-group-upcoming .today-group-count { background-color: var(--slate-600); }
+/* Colores de fondo según la columna */
+.today-group-overdue .today-group-count {
+  background-color: #ef4444; /* Rojo */
+}
+
+.today-group-due_today .today-group-count {
+  background-color: #d97706; /* Ámbar / Naranja */
+}
+
+.today-group-upcoming .today-group-count {
+  background-color: #3b82f6; /* Azul */
+}
 
 .today-group-empty {
   margin: 0;
@@ -1974,4 +1983,399 @@ textarea {
   opacity: 0;
   pointer-events: none;
   border: 0;
+}
+
+/* Barra de progreso de preparación del evento */
+.progress-bar-container {
+  width: 100%;
+  margin: 12px 0 16px 0;
+}
+
+.progress-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary, #475569);
+  margin-bottom: 6px;
+}
+
+.progress-bar-percentage {
+  font-weight: 700;
+  color: var(--brand-primary, #2563eb);
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background-color: var(--border-color, #e2e8f0);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 999px;
+  transition: width 0.4s ease-in-out;
+}
+
+.progress-fill-complete {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+}
+
+/* Botón Chip Unificado de Límite Diario en el Sidebar (Ajuste 2) */
+.btn-limit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 2px;
+}
+
+.btn-limit-chip:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+/* Insignia para tareas con estado Hecho */
+.badge-complete {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+  border: 1px solid #a7f3d0 !important;
+}
+
+/* Centrado del mensaje de estado (vacío / sin tareas) */
+.status-message-box {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  width: 100% !important;
+  padding: 48px 24px !important;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+.status-message-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.status-message-title {
+  text-align: center !important;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+  margin: 0 0 6px 0 !important;
+}
+
+.status-message-desc {
+  text-align: center !important;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+  max-width: 380px;
+  margin: 0 auto 16px auto !important;
+  line-height: 1.5;
+}
+
+.status-message-actions {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 12px;
+  width: 100%;
+}
+
+/* ==========================================================================
+   Diseño fluido de pantalla completa para la vista Hoy (Dashboard layout)
+   ========================================================================== */
+
+/* La página aprovecha todo el ancho disponible sin dejar huecos vacíos */
+.today-page {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+/* La barra de herramientas distribuye los filtros a la izquierda y la ayuda a la derecha */
+.today-toolbar {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-end !important;
+  width: 100% !important;
+  margin-bottom: 20px;
+}
+
+/* Cuadrícula fluida: la columna izquierda se estira y el resumen se ancla a la derecha */
+.today-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 340px !important;
+  gap: 24px !important;
+  width: 100% !important;
+  align-items: start;
+}
+
+/* La tarjeta vacía ocupa armónicamente toda la columna izquierda */
+.today-layout > div[aria-busy] {
+  width: 100%;
+}
+
+.today-layout .status-message-box {
+  width: 100% !important;
+  min-height: 260px;
+  padding: 40px 24px !important;
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color, #e2e8f0);
+}
+
+
+
+/* ==========================================================================
+   VISTA HOY: DISTRIBUCIÓN HORIZONTAL EN 3 COLUMNAS
+   ========================================================================== */
+
+.today-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 24px;
+  align-items: start;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .today-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Contenedor de las 3 columnas */
+.today-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .today-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Columna individual para cada grupo */
+.today-group {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 240px;
+}
+
+/* Colores de acento sutiles para los encabezados de columna */
+.today-group-overdue {
+  border-top: 4px solid #ef4444;
+}
+
+.today-group-due_today {
+  border-top: 4px solid #f59e0b;
+}
+
+.today-group-upcoming {
+  border-top: 4px solid #3b82f6;
+}
+
+/* Título de cada columna */
+.today-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.today-group-count {
+  margin-left: auto;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Lista de tarjetas dentro de la columna */
+.today-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+/* Tarjeta individual */
+.today-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.today-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+}
+
+.today-group-empty {
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 24px 8px;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  margin: 0;
+}
+
+/* ==========================================================================
+   SIDEBAR INFERIOR: PERFIL Y LÍMITE DIARIO
+   ========================================================================== */
+
+.sidebar-bottom {
+  padding: 12px;
+  border-top: 1px solid #e2e8f0;
+  background-color: #ffffff;
+}
+
+.profile-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Fila de usuario + cerrar sesión */
+.profile-user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-info {
+  flex: 1;
+  min-width: 0; /* Permite truncate */
+}
+
+.profile-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+/* Botón cerrar sesión */
+.btn-logout {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.btn-logout:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* Botón interactivo de límite diario (Ancho completo) */
+.btn-limit-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #475569;
+  font-size: 12px;
+}
+
+.btn-limit-card:hover {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.btn-limit-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.btn-limit-left .icon-limit {
+  color: #2563eb;
+}
+
+/* Badge con el valor */
+.limit-value-badge {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.btn-limit-card:hover .limit-value-badge {
+  border-color: #93c5fd;
+  color: #1d4ed8;
 }

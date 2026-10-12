@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import OverloadConflictModal from '../components/OverloadConflictModal'
+import PostponeModal from '../components/PostponeModal'
+import ProgressBar from '../components/ProgressBar'
 import {
   IconMapPin,
   IconCalendar,
@@ -55,7 +57,6 @@ const INITIAL_SUBTASK_FORM_STATE = {
 
 const EMPTY_FEEDBACK = { type: null, message: '', details: null }
 
-// Precarga el formulario de edición del evento con los valores actuales
 function buildEventFormValues(eventData) {
   return {
     name: eventData.name || '',
@@ -68,7 +69,6 @@ function buildEventFormValues(eventData) {
   }
 }
 
-// Precarga el formulario de edición de una gestión con sus valores actuales
 function buildSubtaskFormValues(task) {
   const hours = task.estimated_hours
   return {
@@ -84,15 +84,15 @@ function buildSubtaskFormValues(task) {
 
 export default function EventDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [event, setEvent] = useState(null)
 
   const [conflictState, setConflictState] = useState(null)
-  // Cada intento de carga tiene una clave; "cargando" = la respuesta de ese intento aún no llega
+  const [postponeState, setPostponeState] = useState(null)
   const [attempt, setAttempt] = useState(0)
   const loadKey = `${id}|${attempt}`
   const [loadResult, setLoadResult] = useState({ key: null, error: null })
 
-  // Estado controlado del formulario de creación de gestiones
   const [subtaskForm, setSubtaskForm] = useState(INITIAL_SUBTASK_FORM_STATE)
   const [subtaskErrors, setSubtaskErrors] = useState({})
   const [subtaskTouched, setSubtaskTouched] = useState({})
@@ -100,7 +100,6 @@ export default function EventDetail() {
   const [feedback, setFeedback] = useState(EMPTY_FEEDBACK)
   const [showSubtaskForm, setShowSubtaskForm] = useState(false)
 
-  // Estado controlado de la edición del evento
   const [isEditingEvent, setIsEditingEvent] = useState(false)
   const [eventForm, setEventForm] = useState(INITIAL_EVENT_FORM_STATE)
   const [eventErrors, setEventErrors] = useState({})
@@ -108,16 +107,9 @@ export default function EventDetail() {
   const [isEventSubmitting, setIsEventSubmitting] = useState(false)
   const [eventFeedback, setEventFeedback] = useState(EMPTY_FEEDBACK)
 
-  // Formularios de edición de gestiones, indexados por id de subtarea:
-  // cada uno tiene su propio feedback y su propio isSubmitting,
-  // de modo que editar una gestión no bloquea a otra ni al formulario del evento.
   const [editingSubtasks, setEditingSubtasks] = useState({})
-
-  // Confirmación de eliminación (evento o gestión) y estado del DELETE en curso
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
-
-  const navigate = useNavigate()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -140,61 +132,53 @@ export default function EventDetail() {
   const error = loadResult.error
   const fetchEvent = () => setAttempt((n) => n + 1)
 
-  // Las gestiones deben quedar entre hoy y la fecha del evento. Al editar una gestión
-  // se permite conservar su fecha guardada aunque ya haya vencido.
+  const subtasks = Array.isArray(event?.subtasks) ? event.subtasks : []
+
+  // Cálculo reactivo consistente de la barra de progreso (US-10, PI-147)
+  const progressData = useMemo(() => {
+    const total = subtasks.length
+    const executed = subtasks.filter((t) => t.status === 'done').length
+    const percentage = total > 0 ? Math.round((executed / total) * 100) : 0
+    return { total, executed, percentage }
+  }, [subtasks])
+
   const newSubtaskDateRange = { eventDate: event?.event_date }
   const editDateRange = (subtaskId) => ({
     eventDate: event?.event_date,
     originalDate: event?.subtasks?.find((subtask) => subtask.id === subtaskId)?.scheduled_date,
   })
 
-  // Manejador de cambios con re-validación inmediata
   const handleChangeSubtask = (e) => {
     const { name, value } = e.target
+    setSubtaskForm((prev) => ({ ...prev, [name]: value }))
 
-    setSubtaskForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-
-    // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
     if (subtaskTouched[name] || subtaskErrors[name]) {
-      const fieldError = validateSubtaskField(name, value, newSubtaskDateRange)
       setSubtaskErrors((prev) => ({
         ...prev,
-        [name]: fieldError,
+        [name]: validateSubtaskField(name, value, newSubtaskDateRange),
       }))
     }
   }
 
-  // Manejador de pérdida de foco (onBlur) para validación inline
   const handleBlurSubtask = (e) => {
     const { name, value } = e.target
-    setSubtaskTouched((prev) => ({
-      ...prev,
-      [name]: true,
-    }))
-
-    const fieldError = validateSubtaskField(name, value, newSubtaskDateRange)
+    setSubtaskTouched((prev) => ({ ...prev, [name]: true }))
     setSubtaskErrors((prev) => ({
       ...prev,
-      [name]: fieldError,
+      [name]: validateSubtaskField(name, value, newSubtaskDateRange),
     }))
   }
 
-  // Manejador del envío del formulario de gestión
   const handleSubmitSubtask = async (e) => {
     e.preventDefault()
     setFeedback(EMPTY_FEEDBACK)
 
-    // Marcar todos los campos como tocados al intentar enviar
     const allTouched = Object.keys(subtaskForm).reduce((acc, key) => {
       acc[key] = true
       return acc
     }, {})
     setSubtaskTouched(allTouched)
 
-    // Validar todos los campos
     const formErrors = validateSubtaskForm(subtaskForm, newSubtaskDateRange)
     setSubtaskErrors(formErrors)
 
@@ -219,49 +203,35 @@ export default function EventDetail() {
 
     try {
       const data = await apiFetch(`/api/events/${id}/subtasks/`, { method: 'POST', body: payload })
-
       setEvent((prev) => ({
         ...prev,
         subtasks: [...(Array.isArray(prev.subtasks) ? prev.subtasks : []), data],
       }))
-
       setFeedback({
         type: 'success',
         message: `¡Gestión "${data.name}" registrada con éxito!`,
         details: data,
       })
-
       setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
       setSubtaskErrors({})
       setSubtaskTouched({})
       setShowSubtaskForm(false)
-      
     } catch (err) {
-      console.error(err)
-
       if (err.status === 409 && err.details) {
         setConflictState({
-          subtask: {
-            ...payload,
-            name: subtaskForm.name,
-            event_id: id, // ID del evento para el POST
-          },
+          subtask: { ...payload, name: subtaskForm.name, event_id: id },
           conflictData: err.details,
           eventDate: event.event_date,
-          isNew: true, // Marca que es una tarea nueva
+          isNew: true,
         })
       } else {
-        setFeedback({
-          type: 'error',
-          message: err.message,
-        })
+        setFeedback({ type: 'error', message: err.message })
       }
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Restablecer formulario y estados de validación de la gestión
   const handleResetSubtask = () => {
     setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
     setSubtaskErrors({})
@@ -269,9 +239,45 @@ export default function EventDetail() {
     setFeedback(EMPTY_FEEDBACK)
   }
 
-  /* ===================== Edición del evento (PATCH) ===================== */
+  // Marcar subtarea individual como realizada (US-09)
+  const handleMarkDone = async (task) => {
+    try {
+      const data = await apiFetch(`/api/subtasks/${task.id}/`, {
+        method: 'PATCH',
+        body: { status: 'done' },
+      })
+      setEvent((prev) => ({
+        ...prev,
+        subtasks: prev.subtasks.map((s) => (s.id === task.id ? data : s)),
+      }))
+      setFeedback({
+        type: 'success',
+        message: `Gestión "${data.name}" completada exitosamente.`,
+        details: data,
+      })
+    } catch (err) {
+      setFeedback({ type: 'error', message: err.message || 'No se pudo completar la gestión.' })
+    }
+  }
 
-  // Activa el modo edición precargando el formulario con los datos actuales
+  // Posponer con nota explicativa (US-09)
+  const handleConfirmPostpone = async (task, note) => {
+    const data = await apiFetch(`/api/subtasks/${task.id}/`, {
+      method: 'PATCH',
+      body: { status: 'postponed', note },
+    })
+    setEvent((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.map((s) => (s.id === task.id ? data : s)),
+    }))
+    setPostponeState(null)
+    setFeedback({
+      type: 'success',
+      message: `Gestión "${data.name}" pospuesta.`,
+      details: data,
+    })
+  }
+
   const handleStartEditEvent = () => {
     setEventForm(buildEventFormValues(event))
     setEventErrors({})
@@ -280,7 +286,6 @@ export default function EventDetail() {
     setIsEditingEvent(true)
   }
 
-  // Cancela la edición y vuelve a la vista de solo lectura
   const handleCancelEditEvent = () => {
     setIsEditingEvent(false)
     setEventErrors({})
@@ -290,33 +295,22 @@ export default function EventDetail() {
 
   const handleChangeEvent = (e) => {
     const { name, value } = e.target
+    setEventForm((prev) => ({ ...prev, [name]: value }))
 
-    setEventForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-
-    // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
     if (eventTouched[name] || eventErrors[name]) {
-      const fieldError = validateEventField(name, value, { originalDate: event.event_date })
       setEventErrors((prev) => ({
         ...prev,
-        [name]: fieldError,
+        [name]: validateEventField(name, value, { originalDate: event.event_date }),
       }))
     }
   }
 
   const handleBlurEvent = (e) => {
     const { name, value } = e.target
-    setEventTouched((prev) => ({
-      ...prev,
-      [name]: true,
-    }))
-
-    const fieldError = validateEventField(name, value, { originalDate: event.event_date })
+    setEventTouched((prev) => ({ ...prev, [name]: true }))
     setEventErrors((prev) => ({
       ...prev,
-      [name]: fieldError,
+      [name]: validateEventField(name, value, { originalDate: event.event_date }),
     }))
   }
 
@@ -324,14 +318,12 @@ export default function EventDetail() {
     e.preventDefault()
     setEventFeedback(EMPTY_FEEDBACK)
 
-    // Marcar todos los campos como tocados al intentar enviar
     const allTouched = Object.keys(eventForm).reduce((acc, key) => {
       acc[key] = true
       return acc
     }, {})
     setEventTouched(allTouched)
 
-    // Validar todos los campos
     const formErrors = validateEventForm(eventForm, { originalDate: event.event_date })
     setEventErrors(formErrors)
 
@@ -357,34 +349,20 @@ export default function EventDetail() {
 
     try {
       const data = await apiFetch(`/api/events/${id}/`, { method: 'PATCH', body: payload })
-
-      // El PATCH devuelve el evento completo (incluye subtasks): se reemplaza
-      // el estado local sin volver a hacer GET y se regresa a la vista de solo lectura
       setEvent(data)
       setIsEditingEvent(false)
-      setEventErrors({})
-      setEventTouched({})
       setEventFeedback({
         type: 'success',
         message: `¡Evento "${data.name}" actualizado con éxito!`,
         details: data,
       })
     } catch (err) {
-      // En un fallo de conexión no se cierra el formulario: lo escrito se conserva
-      console.error(err)
-      setEventFeedback({
-        type: 'error',
-        message:
-          err.message,
-      })
+      setEventFeedback({ type: 'error', message: err.message })
     } finally {
       setIsEventSubmitting(false)
     }
   }
 
-  /* =================== Edición de gestiones (PATCH) =================== */
-
-  // Actualiza parcialmente el formulario de edición de una gestión
   const updateEditingSubtask = (subtaskId, patch) => {
     setEditingSubtasks((prev) =>
       prev[subtaskId] ? { ...prev, [subtaskId]: { ...prev[subtaskId], ...patch } } : prev
@@ -414,35 +392,26 @@ export default function EventDetail() {
 
   const handleChangeSubtaskEdit = (subtaskId, e) => {
     const { name, value } = e.target
-
     setEditingSubtasks((prev) => {
       const entry = prev[subtaskId]
       if (!entry) return prev
+      const nextEntry = { ...entry, form: { ...entry.form, [name]: value } }
 
-      const nextEntry = {
-        ...entry,
-        form: { ...entry.form, [name]: value },
-      }
-
-      // Si el campo ya fue visitado o ya tenía error, re-validamos en tiempo real
       if (entry.touched[name] || entry.errors[name]) {
         nextEntry.errors = {
           ...entry.errors,
           [name]: validateSubtaskField(name, value, editDateRange(subtaskId)),
         }
       }
-
       return { ...prev, [subtaskId]: nextEntry }
     })
   }
 
   const handleBlurSubtaskEdit = (subtaskId, e) => {
     const { name, value } = e.target
-
     setEditingSubtasks((prev) => {
       const entry = prev[subtaskId]
       if (!entry) return prev
-
       return {
         ...prev,
         [subtaskId]: {
@@ -456,24 +425,20 @@ export default function EventDetail() {
 
   const handleSubmitSubtaskEdit = async (subtaskId, e) => {
     e.preventDefault()
-
     const entry = editingSubtasks[subtaskId]
     if (!entry) return
 
-    // Marcar todos los campos como tocados al intentar enviar
     const allTouched = Object.keys(entry.form).reduce((acc, key) => {
       acc[key] = true
       return acc
     }, {})
 
-    // Validar todos los campos
     const formErrors = validateSubtaskForm(entry.form, editDateRange(subtaskId))
     const hasErrors = Object.keys(formErrors).length > 0
 
     setEditingSubtasks((prev) => {
       const current = prev[subtaskId]
       if (!current) return prev
-
       return {
         ...prev,
         [subtaskId]: {
@@ -507,33 +472,23 @@ export default function EventDetail() {
 
     try {
       const data = await apiFetch(`/api/subtasks/${subtaskId}/`, { method: 'PATCH', body: payload })
-
-      // Reemplaza solo esa gestión dentro de event.subtasks
       setEvent((prev) => ({
         ...prev,
-        subtasks: (Array.isArray(prev.subtasks) ? prev.subtasks : []).map((subtask) =>
-          subtask.id === subtaskId ? data : subtask
-        ),
+        subtasks: prev.subtasks.map((s) => (s.id === subtaskId ? data : s)),
       }))
-
       handleCancelEditSubtask(subtaskId)
-
       setFeedback({
         type: 'success',
         message: `¡Gestión "${data.name}" actualizada con éxito!`,
         details: data,
       })
     } catch (err) {
-      console.error(err)
-
       if (err.status === 409 && err.details) {
-        // Tomamos la tarea original y le combinamos lo que acabas de escribir en el formulario (las 4h, el nombre, etc.)
         const currentSubtask = {
           ...(event?.subtasks?.find((s) => s.id === subtaskId) || {}),
           ...entry.form,
           id: subtaskId,
         }
-
         setConflictState({
           subtask: currentSubtask,
           conflictData: err.details,
@@ -541,11 +496,7 @@ export default function EventDetail() {
         })
       } else {
         updateEditingSubtask(subtaskId, {
-          feedback: {
-            type: 'error',
-            message: err.message,
-            details: null,
-          },
+          feedback: { type: 'error', message: err.message, details: null },
         })
       }
     } finally {
@@ -553,22 +504,17 @@ export default function EventDetail() {
     }
   }
 
-  /* =================== Eliminación (DELETE) =================== */
-
-  // Abre el diálogo de confirmación para eliminar el evento completo
   const handleRequestDeleteEvent = () => {
     setFeedback(EMPTY_FEEDBACK)
     setEventFeedback(EMPTY_FEEDBACK)
     setConfirmDelete({ type: 'event', id, name: event.name })
   }
 
-  // Abre el diálogo de confirmación para eliminar una gestión individual
   const handleRequestDeleteSubtask = (task) => {
     setFeedback(EMPTY_FEEDBACK)
     setConfirmDelete({ type: 'subtask', id: task.id, name: task.name })
   }
 
-  // Mientras el DELETE está en curso el diálogo no se puede cerrar
   const handleCancelDelete = () => {
     if (isDeleting) return
     setConfirmDelete(null)
@@ -576,31 +522,21 @@ export default function EventDetail() {
 
   const handleConfirmDelete = async () => {
     if (isDeleting || !confirmDelete) return
-
     setIsDeleting(true)
 
     try {
       if (confirmDelete.type === 'event') {
-        // El backend elimina en cascada las gestiones asociadas al evento
         await apiFetch(`/api/events/${confirmDelete.id}/`, { method: 'DELETE' })
-
-        // El evento ya no existe: la vista de detalle deja de ser válida
         setConfirmDelete(null)
         navigate('/eventos')
         return
       }
 
       await apiFetch(`/api/subtasks/${confirmDelete.id}/`, { method: 'DELETE' })
-
-      // Quitar la gestión del estado local, sin volver a pedir el evento completo;
-      // el contador "X gestiones" se actualiza solo porque deriva de subtasks.length
       setEvent((prev) => ({
         ...prev,
-        subtasks: (Array.isArray(prev.subtasks) ? prev.subtasks : []).filter(
-          (subtask) => subtask.id !== confirmDelete.id
-        ),
+        subtasks: prev.subtasks.filter((s) => s.id !== confirmDelete.id),
       }))
-
       setConfirmDelete(null)
       setFeedback({
         type: 'success',
@@ -608,16 +544,12 @@ export default function EventDetail() {
         details: null,
       })
     } catch (err) {
-      // En un fallo de conexión no se oculta nada: se informa el error al usuario
-      console.error(err)
-      const message = err.message
-
       setConfirmDelete(null)
-
+      const msg = err.message
       if (confirmDelete.type === 'event') {
-        setEventFeedback({ type: 'error', message, details: null })
+        setEventFeedback({ type: 'error', message: msg, details: null })
       } else {
-        setFeedback({ type: 'error', message, details: null })
+        setFeedback({ type: 'error', message: msg, details: null })
       }
     } finally {
       setIsDeleting(false)
@@ -647,11 +579,8 @@ export default function EventDetail() {
     )
   }
 
-  const subtasks = Array.isArray(event.subtasks) ? event.subtasks : []
-
   return (
     <div className="create-page-container">
-      {/* Feedback de la edición/eliminación del evento (éxito o error) */}
       {eventFeedback.type === 'success' && (
         <div className="banner-alert banner-success" role="alert">
           <div className="banner-icon-side">
@@ -659,26 +588,17 @@ export default function EventDetail() {
           </div>
           <div className="banner-content">
             <strong>{eventFeedback.message}</strong>
-            {eventFeedback.details?.event_date && (
-              <p className="banner-subtext">
-                Tipo: {getOptionLabel(EVENT_TYPES, eventFeedback.details.event_type)} &bull; Fecha:{' '}
-                {formatDateFromISO(eventFeedback.details.event_date)}
-              </p>
-            )}
           </div>
-          <div className="banner-actions">
-            <button
-              type="button"
-              className="btn-alert-primary"
-              onClick={() => setEventFeedback(EMPTY_FEEDBACK)}
-            >
-              Cerrar aviso
-            </button>
-          </div>
+          <button
+            type="button"
+            className="btn-alert-primary"
+            onClick={() => setEventFeedback(EMPTY_FEEDBACK)}
+          >
+            Cerrar aviso
+          </button>
         </div>
       )}
 
-      {/* Error de una operación sobre el evento fuera del formulario (p. ej. DELETE fallido) */}
       {eventFeedback.type === 'error' && !isEditingEvent && (
         <div className="banner-alert banner-error" role="alert">
           <div className="banner-icon-side">
@@ -728,35 +648,12 @@ export default function EventDetail() {
 
         {isEditingEvent ? (
           <form onSubmit={handleSubmitEvent} noValidate className="form-body-pro">
-            {/* Feedback de error de la edición del evento */}
-            {eventFeedback.type === 'error' && (
-              <div className="banner-alert banner-error" role="alert">
-                <div className="banner-icon-side">
-                  <IconAlertTriangle size={20} className="icon-rose" />
-                </div>
-                <div className="banner-content">
-                  <strong>Atención:</strong> {eventFeedback.message}
-                </div>
-                <button
-                  type="button"
-                  className="btn-close-alert"
-                  aria-label="Cerrar alerta"
-                  onClick={() => setEventFeedback(EMPTY_FEEDBACK)}
-                >
-                  <IconX size={16} />
-                </button>
-              </div>
-            )}
-
-            {/* Nombre del Evento */}
             <div className="field-group">
               <div className="field-label-row">
                 <label htmlFor="event-name" className="field-label">
                   Nombre del evento <span className="req-star">*</span>
                 </label>
-                <span className="char-counter">
-                  {eventForm.name.length}/200
-                </span>
+                <span className="char-counter">{eventForm.name.length}/200</span>
               </div>
               <input
                 id="event-name"
@@ -765,21 +662,15 @@ export default function EventDetail() {
                 value={eventForm.name}
                 onChange={handleChangeEvent}
                 onBlur={handleBlurEvent}
-                placeholder="Ej: Aniversario Corporativo 25 Años"
                 className={`field-input ${eventTouched.name && eventErrors.name ? 'field-input-error' : ''}`}
                 required
                 maxLength={200}
-                aria-invalid={eventTouched.name && !!eventErrors.name}
-                aria-describedby={eventErrors.name ? 'event-name-error' : undefined}
               />
               {eventTouched.name && eventErrors.name && (
-                <span id="event-name-error" className="field-error-text">
-                  {eventErrors.name}
-                </span>
+                <span className="field-error-text">{eventErrors.name}</span>
               )}
             </div>
 
-            {/* Fila: Tipo y Estado */}
             <div className="field-row-2">
               <div className="field-group">
                 <label htmlFor="event-type" className="field-label">
@@ -791,21 +682,14 @@ export default function EventDetail() {
                   value={eventForm.event_type}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  className={`field-input field-select ${eventTouched.event_type && eventErrors.event_type ? 'field-input-error' : ''}`}
+                  className="field-input field-select"
                   required
                 >
-                  <option value="" disabled>
-                    Selecciona un tipo
-                  </option>
-                  {EVENT_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
+                  <option value="" disabled>Selecciona un tipo</option>
+                  {EVENT_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
-                {eventTouched.event_type && eventErrors.event_type && (
-                  <span className="field-error-text">{eventErrors.event_type}</span>
-                )}
               </div>
 
               <div className="field-group">
@@ -818,22 +702,16 @@ export default function EventDetail() {
                   value={eventForm.status}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  className={`field-input field-select ${eventTouched.status && eventErrors.status ? 'field-input-error' : ''}`}
+                  className="field-input field-select"
                   required
                 >
                   {EVENT_STATUSES.map((st) => (
-                    <option key={st.value} value={st.value}>
-                      {st.label}
-                    </option>
+                    <option key={st.value} value={st.value}>{st.label}</option>
                   ))}
                 </select>
-                {eventTouched.status && eventErrors.status && (
-                  <span className="field-error-text">{eventErrors.status}</span>
-                )}
               </div>
             </div>
 
-            {/* Fila: Fecha del evento y Contacto */}
             <div className="field-row-2">
               <div className="field-group">
                 <label htmlFor="event-date" className="field-label">
@@ -846,22 +724,13 @@ export default function EventDetail() {
                   min={event.event_date < todayISO() ? event.event_date : todayISO()}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  className={`field-input ${eventTouched.event_date && eventErrors.event_date ? 'field-input-error' : ''}`}
+                  className="field-input"
                   required
-                  aria-invalid={eventTouched.event_date && !!eventErrors.event_date}
-                  aria-describedby={eventErrors.event_date ? 'event-date-error' : undefined}
                 />
-                {eventTouched.event_date && eventErrors.event_date && (
-                  <span id="event-date-error" className="field-error-text">
-                    {eventErrors.event_date}
-                  </span>
-                )}
               </div>
 
               <div className="field-group">
-                <label htmlFor="event-contact" className="field-label">
-                  Cliente / contacto
-                </label>
+                <label htmlFor="event-contact" className="field-label">Cliente / contacto</label>
                 <input
                   id="event-contact"
                   type="text"
@@ -869,21 +738,14 @@ export default function EventDetail() {
                   value={eventForm.contact}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  placeholder="Ej: Grupo Financiero Andino"
                   maxLength={255}
-                  className={`field-input ${eventTouched.contact && eventErrors.contact ? 'field-input-error' : ''}`}
+                  className="field-input"
                 />
-                {eventTouched.contact && eventErrors.contact && (
-                  <span className="field-error-text">{eventErrors.contact}</span>
-                )}
               </div>
             </div>
 
-            {/* Lugar */}
             <div className="field-group">
-              <label htmlFor="event-location" className="field-label">
-                Lugar
-              </label>
+              <label htmlFor="event-location" className="field-label">Lugar</label>
               <input
                 id="event-location"
                 type="text"
@@ -891,24 +753,15 @@ export default function EventDetail() {
                 value={eventForm.location}
                 onChange={handleChangeEvent}
                 onBlur={handleBlurEvent}
-                placeholder="Ej: Club Campestre Central, Salón Principal"
                 maxLength={255}
-                className={`field-input ${eventTouched.location && eventErrors.location ? 'field-input-error' : ''}`}
+                className="field-input"
               />
-              {eventTouched.location && eventErrors.location && (
-                <span className="field-error-text">{eventErrors.location}</span>
-              )}
             </div>
 
-            {/* Descripción / Notas */}
             <div className="field-group">
               <div className="field-label-row">
-                <label htmlFor="event-description" className="field-label">
-                  Descripción o notas
-                </label>
-                <span className="char-counter">
-                  {eventForm.description.length}/2000
-                </span>
+                <label htmlFor="event-description" className="field-label">Descripción o notas</label>
+                <span className="char-counter">{eventForm.description.length}/2000</span>
               </div>
               <textarea
                 id="event-description"
@@ -916,17 +769,12 @@ export default function EventDetail() {
                 value={eventForm.description}
                 onChange={handleChangeEvent}
                 onBlur={handleBlurEvent}
-                placeholder="Notas para el montaje, requerimientos logísticos o acuerdos con el cliente..."
                 rows="3"
                 maxLength={2000}
-                className={`field-input field-textarea ${eventTouched.description && eventErrors.description ? 'field-input-error' : ''}`}
+                className="field-input field-textarea"
               />
-              {eventTouched.description && eventErrors.description && (
-                <span className="field-error-text">{eventErrors.description}</span>
-              )}
             </div>
 
-            {/* Botones de acción */}
             <div className="form-actions-row">
               <button
                 type="button"
@@ -972,7 +820,7 @@ export default function EventDetail() {
         )}
       </div>
 
-      {/* Gestiones (subtareas logísticas) del evento */}
+      {/* Sección Gestiones con Barra de Progreso Integrada (US-10) */}
       <section className="events-section">
         <div className="section-header-row">
           <div>
@@ -996,7 +844,18 @@ export default function EventDetail() {
           </div>
         </div>
 
-        {/* Alerta de Feedback (Éxito o Error) */}
+        {/* Barra de progreso de preparación del evento visible y reactiva */}
+        <div style={{ background: '#ffffff', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+          <strong style={{ fontSize: '13px', color: '#1e293b', display: 'block', marginBottom: '4px' }}>
+            Progreso de preparación
+          </strong>
+          <ProgressBar
+            executed={progressData.executed}
+            total={progressData.total}
+            percentage={progressData.percentage}
+          />
+        </div>
+
         {feedback.type === 'success' && (
           <div className="banner-alert banner-success" role="alert">
             <div className="banner-icon-side">
@@ -1004,21 +863,14 @@ export default function EventDetail() {
             </div>
             <div className="banner-content">
               <strong>{feedback.message}</strong>
-              {feedback.details?.scheduled_date && (
-                <p className="banner-subtext">
-                  Fecha objetivo: {formatDateFromISO(feedback.details.scheduled_date)}
-                </p>
-              )}
             </div>
-            <div className="banner-actions">
-              <button
-                type="button"
-                className="btn-alert-primary"
-                onClick={() => setFeedback(EMPTY_FEEDBACK)}
-              >
-                Cerrar aviso
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn-alert-primary"
+              onClick={() => setFeedback(EMPTY_FEEDBACK)}
+            >
+              Cerrar aviso
+            </button>
           </div>
         )}
 
@@ -1041,7 +893,6 @@ export default function EventDetail() {
           </div>
         )}
 
-        {/* Formulario de creación de gestión */}
         {showSubtaskForm && (
           <div className="form-card-pro">
             <div className="form-card-header">
@@ -1061,15 +912,12 @@ export default function EventDetail() {
               noValidate
               className="form-body-pro"
             >
-              {/* Nombre de la Gestión */}
               <div className="field-group">
                 <div className="field-label-row">
                   <label htmlFor="subtask-name" className="field-label">
                     Nombre de la gestión <span className="req-star">*</span>
                   </label>
-                  <span className="char-counter">
-                    {subtaskForm.name.length}/200
-                  </span>
+                  <span className="char-counter">{subtaskForm.name.length}/200</span>
                 </div>
                 <input
                   id="subtask-name"
@@ -1082,17 +930,12 @@ export default function EventDetail() {
                   className={`field-input ${subtaskTouched.name && subtaskErrors.name ? 'field-input-error' : ''}`}
                   required
                   maxLength={200}
-                  aria-invalid={subtaskTouched.name && !!subtaskErrors.name}
-                  aria-describedby={subtaskErrors.name ? 'subtask-name-error' : undefined}
                 />
                 {subtaskTouched.name && subtaskErrors.name && (
-                  <span id="subtask-name-error" className="field-error-text">
-                    {subtaskErrors.name}
-                  </span>
+                  <span className="field-error-text">{subtaskErrors.name}</span>
                 )}
               </div>
 
-              {/* Fila: Tipo y Prioridad */}
               <div className="field-row-2">
                 <div className="field-group">
                   <label htmlFor="subtask-type" className="field-label">
@@ -1104,27 +947,18 @@ export default function EventDetail() {
                     value={subtaskForm.type}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
-                    className={`field-input field-select ${subtaskTouched.type && subtaskErrors.type ? 'field-input-error' : ''}`}
+                    className="field-input field-select"
                     required
                   >
-                    <option value="" disabled>
-                      Selecciona un tipo de gestión
-                    </option>
-                    {TASK_TYPES.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
+                    <option value="" disabled>Selecciona un tipo</option>
+                    {TASK_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
-                  {subtaskTouched.type && subtaskErrors.type && (
-                    <span className="field-error-text">{subtaskErrors.type}</span>
-                  )}
                 </div>
 
                 <div className="field-group">
-                  <label htmlFor="subtask-priority" className="field-label">
-                    Prioridad
-                  </label>
+                  <label htmlFor="subtask-priority" className="field-label">Prioridad</label>
                   <select
                     id="subtask-priority"
                     name="priority"
@@ -1133,16 +967,13 @@ export default function EventDetail() {
                     onBlur={handleBlurSubtask}
                     className="field-input field-select"
                   >
-                    {TASK_PRIORITIES.map((priority) => (
-                      <option key={priority.value} value={priority.value}>
-                        {priority.label}
-                      </option>
+                    {TASK_PRIORITIES.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* Fila: Fecha Programada y Horas Estimadas */}
               <div className="field-row-2">
                 <div className="field-group">
                   <label htmlFor="subtask-date" className="field-label">
@@ -1156,15 +987,11 @@ export default function EventDetail() {
                     max={event.event_date}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
-                    className={`field-input ${subtaskTouched.scheduled_date && subtaskErrors.scheduled_date ? 'field-input-error' : ''}`}
+                    className="field-input"
                     required
-                    aria-invalid={subtaskTouched.scheduled_date && !!subtaskErrors.scheduled_date}
-                    aria-describedby={subtaskErrors.scheduled_date ? 'subtask-date-error' : undefined}
                   />
                   {subtaskTouched.scheduled_date && subtaskErrors.scheduled_date && (
-                    <span id="subtask-date-error" className="field-error-text">
-                      {subtaskErrors.scheduled_date}
-                    </span>
+                    <span className="field-error-text">{subtaskErrors.scheduled_date}</span>
                   )}
                 </div>
 
@@ -1182,46 +1009,28 @@ export default function EventDetail() {
                     placeholder="Ej: 2.5"
                     min="0"
                     step="0.1"
-                    className={`field-input ${subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'field-input-error' : ''}`}
+                    className="field-input"
                     required
-                    aria-invalid={subtaskTouched.estimated_hours && !!subtaskErrors.estimated_hours}
-                    aria-describedby={subtaskErrors.estimated_hours ? 'subtask-hours-error' : 'subtask-hours-hint'}
                   />
-                  <small id="subtask-hours-hint" className="field-hint">
-                    Número mayor a 0, con máximo 1 decimal.
-                  </small>
-                  {subtaskTouched.estimated_hours && subtaskErrors.estimated_hours && (
-                    <span id="subtask-hours-error" className="field-error-text">
-                      {subtaskErrors.estimated_hours}
-                    </span>
-                  )}
                 </div>
               </div>
 
-              {/* Nota */}
               <div className="field-group">
-                <label htmlFor="subtask-note" className="field-label">
-                  Nota
-                </label>
+                <label htmlFor="subtask-note" className="field-label">Nota</label>
                 <textarea
                   id="subtask-note"
                   name="note"
                   value={subtaskForm.note}
                   onChange={handleChangeSubtask}
                   onBlur={handleBlurSubtask}
-                  placeholder="Indicaciones adicionales para esta gestión..."
+                  placeholder="Indicaciones adicionales..."
                   rows="3"
                   className="field-input field-textarea"
                 />
               </div>
 
-              {/* Botones de acción */}
               <div className="form-actions-row">
-                <button
-                  type="reset"
-                  className="btn-sec-pro"
-                  disabled={isSubmitting}
-                >
+                <button type="reset" className="btn-sec-pro" disabled={isSubmitting}>
                   Limpiar formulario
                 </button>
                 <button
@@ -1232,11 +1041,7 @@ export default function EventDetail() {
                 >
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  className="btn-submit-pro"
-                  disabled={isSubmitting}
-                >
+                <button type="submit" className="btn-submit-pro" disabled={isSubmitting}>
                   {isSubmitting ? 'Guardando...' : 'Guardar gestión'}
                 </button>
               </div>
@@ -1255,18 +1060,11 @@ export default function EventDetail() {
             {subtasks.map((task) => {
               const editEntry = editingSubtasks[task.id]
 
-              // Tarjeta en modo edición: formulario inline precargado
               if (editEntry) {
                 return (
                   <div key={task.id} className="event-card-item">
                     <div className="event-card-top">
                       <span className="event-status-badge">Editando gestión</span>
-                      <span className="event-date">
-                        <IconCalendar size={13} />
-                        <span>
-                          {task.scheduled_date ? formatDateFromISO(task.scheduled_date) : 'N/A'}
-                        </span>
-                      </span>
                     </div>
 
                     <form
@@ -1274,196 +1072,66 @@ export default function EventDetail() {
                       onSubmit={(e) => handleSubmitSubtaskEdit(task.id, e)}
                       noValidate
                     >
-                      {/* Feedback de error de esta edición */}
-                      {editEntry.feedback.type === 'error' && (
-                        <div className="banner-alert banner-error" role="alert">
-                          <div className="banner-icon-side">
-                            <IconAlertTriangle size={20} className="icon-rose" />
-                          </div>
-                          <div className="banner-content">
-                            <strong>Atención:</strong> {editEntry.feedback.message}
-                          </div>
-                          <button
-                            type="button"
-                            className="btn-close-alert"
-                            aria-label="Cerrar alerta"
-                            onClick={() => updateEditingSubtask(task.id, { feedback: EMPTY_FEEDBACK })}
-                          >
-                            <IconX size={16} />
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Nombre de la Gestión */}
                       <div className="field-group">
-                        <div className="field-label-row">
-                          <label htmlFor={`edit-subtask-${task.id}-name`} className="field-label">
-                            Nombre de la gestión <span className="req-star">*</span>
-                          </label>
-                          <span className="char-counter">
-                            {editEntry.form.name.length}/200
-                          </span>
-                        </div>
+                        <label htmlFor={`edit-${task.id}-name`} className="field-label">
+                          Nombre <span className="req-star">*</span>
+                        </label>
                         <input
-                          id={`edit-subtask-${task.id}-name`}
+                          id={`edit-${task.id}-name`}
                           type="text"
                           name="name"
                           value={editEntry.form.name}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          placeholder="Ej: Reservar el salón principal"
-                          className={`field-input ${editEntry.touched.name && editEntry.errors.name ? 'field-input-error' : ''}`}
+                          className="field-input"
                           required
-                          maxLength={200}
-                          aria-invalid={editEntry.touched.name && !!editEntry.errors.name}
-                          aria-describedby={editEntry.errors.name ? `edit-subtask-${task.id}-name-error` : undefined}
                         />
-                        {editEntry.touched.name && editEntry.errors.name && (
-                          <span id={`edit-subtask-${task.id}-name-error`} className="field-error-text">
-                            {editEntry.errors.name}
-                          </span>
-                        )}
                       </div>
 
-                      {/* Tipo de Gestión */}
                       <div className="field-group">
-                        <label htmlFor={`edit-subtask-${task.id}-type`} className="field-label">
-                          Tipo de gestión <span className="req-star">*</span>
-                        </label>
-                        <select
-                          id={`edit-subtask-${task.id}-type`}
-                          name="type"
-                          value={editEntry.form.type}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input field-select ${editEntry.touched.type && editEntry.errors.type ? 'field-input-error' : ''}`}
-                          required
-                        >
-                          <option value="" disabled>
-                            Selecciona un tipo de gestión
-                          </option>
-                          {TASK_TYPES.map((type) => (
-                            <option key={type.value} value={type.value}>
-                              {type.label}
-                            </option>
-                          ))}
-                        </select>
-                        {editEntry.touched.type && editEntry.errors.type && (
-                          <span className="field-error-text">{editEntry.errors.type}</span>
-                        )}
-                      </div>
-
-                      {/* Fecha Programada */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-subtask-${task.id}-date`} className="field-label">
+                        <label htmlFor={`edit-${task.id}-date`} className="field-label">
                           Fecha objetivo <span className="req-star">*</span>
                         </label>
                         <DateField
-                          id={`edit-subtask-${task.id}-date`}
+                          id={`edit-${task.id}-date`}
                           name="scheduled_date"
                           value={editEntry.form.scheduled_date}
                           min={task.scheduled_date < todayISO() ? task.scheduled_date : todayISO()}
                           max={event.event_date}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
+                          className="field-input"
                           required
-                          aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
-                          aria-describedby={editEntry.errors.scheduled_date ? `edit-subtask-${task.id}-date-error` : undefined}
                         />
-                        {editEntry.touched.scheduled_date && editEntry.errors.scheduled_date && (
-                          <span id={`edit-subtask-${task.id}-date-error`} className="field-error-text">
-                            {editEntry.errors.scheduled_date}
-                          </span>
-                        )}
                       </div>
 
-                      {/* Horas Estimadas */}
                       <div className="field-group">
-                        <label htmlFor={`edit-subtask-${task.id}-hours`} className="field-label">
-                          Horas estimadas <span className="req-star">*</span>
-                        </label>
-                        <input
-                          id={`edit-subtask-${task.id}-hours`}
-                          type="number"
-                          name="estimated_hours"
-                          value={editEntry.form.estimated_hours}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          placeholder="Ej: 2.5"
-                          min="0"
-                          step="0.1"
-                          className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
-                          required
-                          aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
-                          aria-describedby={editEntry.errors.estimated_hours ? `edit-subtask-${task.id}-hours-error` : undefined}
-                        />
-                        {editEntry.touched.estimated_hours && editEntry.errors.estimated_hours && (
-                          <span id={`edit-subtask-${task.id}-hours-error`} className="field-error-text">
-                            {editEntry.errors.estimated_hours}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Prioridad y Estado */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-subtask-${task.id}-priority`} className="field-label">
-                          Prioridad
-                        </label>
+                        <label htmlFor={`edit-${task.id}-status`} className="field-label">Estado</label>
                         <select
-                          id={`edit-subtask-${task.id}-priority`}
-                          name="priority"
-                          value={editEntry.form.priority}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className="field-input field-select"
-                        >
-                          {TASK_PRIORITIES.map((priority) => (
-                            <option key={priority.value} value={priority.value}>
-                              {priority.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="field-group">
-                        <label htmlFor={`edit-subtask-${task.id}-status`} className="field-label">
-                          Estado
-                        </label>
-                        <select
-                          id={`edit-subtask-${task.id}-status`}
+                          id={`edit-${task.id}-status`}
                           name="status"
                           value={editEntry.form.status}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
                           className="field-input field-select"
                         >
-                          {TASK_STATUSES.map((status) => (
-                            <option key={status.value} value={status.value}>
-                              {status.label}
-                            </option>
+                          {TASK_STATUSES.map((st) => (
+                            <option key={st.value} value={st.value}>{st.label}</option>
                           ))}
                         </select>
                       </div>
 
-                      {/* Nota */}
                       <div className="field-group">
-                        <label htmlFor={`edit-subtask-${task.id}-note`} className="field-label">
-                          Nota
-                        </label>
+                        <label htmlFor={`edit-${task.id}-note`} className="field-label">Nota</label>
                         <textarea
-                          id={`edit-subtask-${task.id}-note`}
+                          id={`edit-${task.id}-note`}
                           name="note"
                           value={editEntry.form.note}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          placeholder="Indicaciones adicionales para esta gestión..."
-                          rows="3"
+                          rows="2"
                           className="field-input field-textarea"
                         />
                       </div>
 
-                      {/* Botones de acción */}
                       <div className="form-actions-row">
                         <button
                           type="button"
@@ -1478,7 +1146,7 @@ export default function EventDetail() {
                           className="btn-submit-pro"
                           disabled={editEntry.isSubmitting}
                         >
-                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar cambios'}
+                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar'}
                         </button>
                       </div>
                     </form>
@@ -1486,19 +1154,16 @@ export default function EventDetail() {
                 )
               }
 
-              // Tarjeta en modo solo lectura, con su botón de edición
               const afterEvent = isAfterEventDate(task, event.event_date)
               return (
                 <div key={task.id} className={`event-card-item ${afterEvent ? 'card-date-warning' : ''}`}>
                   <div className="event-card-top">
-                    <span className="event-status-badge">
+                    <span className={`event-status-badge ${task.status === 'done' ? 'badge-complete' : ''}`}>
                       {getOptionLabel(TASK_STATUSES, task.status)}
                     </span>
                     <span className="event-date">
                       <IconCalendar size={13} />
-                      <span>
-                        {task.scheduled_date ? formatDateFromISO(task.scheduled_date) : 'N/A'}
-                      </span>
+                      <span>{task.scheduled_date ? formatDateFromISO(task.scheduled_date) : 'N/A'}</span>
                     </span>
                   </div>
 
@@ -1510,12 +1175,7 @@ export default function EventDetail() {
                   <div className="event-details-list">
                     <div className="event-detail-row">
                       <IconClock size={14} />
-                      <span>
-                        Horas estimadas:{' '}
-                        {task.estimated_hours != null && task.estimated_hours !== ''
-                          ? `${Number(task.estimated_hours).toFixed(1)} hrs`
-                          : 'N/A'}
-                      </span>
+                      <span>Horas: {task.estimated_hours} hrs</span>
                     </div>
                     <div className="event-detail-row">
                       <IconInfo size={14} />
@@ -1523,10 +1183,43 @@ export default function EventDetail() {
                     </div>
                   </div>
 
-                  {task.note && <p className="event-client">Nota: {task.note}</p>}
+                  {task.note && (
+                    <p className="event-client" style={{ marginTop: '8px', fontStyle: 'italic', color: '#475569' }}>
+                      <strong>Nota:</strong> {task.note}
+                    </p>
+                  )}
 
-                  <div className="event-card-footer">
-                    <div className="event-card-actions">
+                  {/* Acciones de ejecución rápida (US-09) */}
+                  <div className="event-card-footer" style={{ flexDirection: 'column', gap: '8px', alignItems: 'stretch' }}>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {task.status !== 'done' && (
+                        <button
+                          type="button"
+                          className="btn-submit-pro btn-small"
+                          style={{ flex: 1, padding: '4px 8px', fontSize: '12px' }}
+                          onClick={() => handleMarkDone(task)}
+                          title="Marcar gestión como hecha"
+                        >
+                          <IconCheckCircle size={13} style={{ marginRight: '4px' }} />
+                          Hecha
+                        </button>
+                      )}
+
+                      {/* Solo se puede posponer si NO está hecha y NO está ya pospuesta */}
+                      {task.status !== 'done' && task.status !== 'postponed' && (
+                        <button
+                          type="button"
+                          className="btn-sec-pro btn-small"
+                          style={{ flex: 1, padding: '4px 8px', fontSize: '12px' }}
+                          onClick={() => setPostponeState(task)}
+                          title="Posponer gestión con nota explicativa"
+                        >
+                          Posponer
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="event-card-actions" style={{ justifyContent: 'flex-end', marginTop: '4px' }}>
                       <button
                         type="button"
                         className="btn-manage-event"
@@ -1550,14 +1243,13 @@ export default function EventDetail() {
         )}
       </section>
 
-      {/* Confirmación de eliminación de evento o gestión */}
       <ConfirmDialog
         open={confirmDelete !== null}
         isDangerous
         title={confirmDelete?.type === 'event' ? 'Eliminar evento' : 'Eliminar gestión'}
         message={
           confirmDelete?.type === 'event'
-            ? `¿Estás seguro de que deseas eliminar el evento "${confirmDelete.name}"? Esta acción eliminará también todas sus gestiones asociadas y no se puede deshacer.`
+            ? `¿Estás seguro de que deseas eliminar el evento "${confirmDelete.name}"? Esta acción eliminará también todas sus gestiones asociadas.`
             : `¿Eliminar la gestión '${confirmDelete?.name ?? ''}'? Esta acción no se puede deshacer.`
         }
         confirmLabel={isDeleting ? 'Eliminando...' : 'Eliminar'}
@@ -1566,7 +1258,7 @@ export default function EventDetail() {
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
       />
-      {/* Modal de resolución de conflicto de sobrecarga */}
+
       <OverloadConflictModal
         isOpen={Boolean(conflictState)}
         conflictData={conflictState?.conflictData}
@@ -1576,9 +1268,7 @@ export default function EventDetail() {
         onResolved={(resultTask, message) => {
           const wasNew = conflictState?.isNew
           setConflictState(null)
-
           if (wasNew) {
-            // Si era nueva, la añadimos a la lista y cerramos el formulario de creación
             setEvent((prev) => ({
               ...prev,
               subtasks: [...(Array.isArray(prev.subtasks) ? prev.subtasks : []), resultTask],
@@ -1586,21 +1276,22 @@ export default function EventDetail() {
             setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
             setShowSubtaskForm(false)
           } else {
-            // Si era edición, reemplazamos la tarea existente
             setEvent((prev) => ({
               ...prev,
               subtasks: prev.subtasks.map((s) => (s.id === resultTask.id ? resultTask : s)),
             }))
             handleCancelEditSubtask(resultTask.id)
           }
-
-          setFeedback({
-            type: 'success',
-            message,
-            details: resultTask,
-          })
+          setFeedback({ type: 'success', message, details: resultTask })
         }}
         onCancel={() => setConflictState(null)}
+      />
+
+      <PostponeModal
+        isOpen={Boolean(postponeState)}
+        subtask={postponeState}
+        onConfirm={handleConfirmPostpone}
+        onCancel={() => setPostponeState(null)}
       />
     </div>
   )

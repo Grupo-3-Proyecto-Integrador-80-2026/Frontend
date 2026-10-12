@@ -1,3 +1,4 @@
+// Ruta: src/pages/Today.jsx
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -13,14 +14,13 @@ import SortRuleHelp from '../components/SortRuleHelp'
 import StatusMessage from '../components/StatusMessage'
 import DateWarning from '../components/DateWarning'
 import OverloadConflictModal from '../components/OverloadConflictModal'
+import PostponeModal from '../components/PostponeModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
 import { apiFetch } from '../api/client'
 import { daysBetween, formatDateFromISO, getOptionLabel, isAfterEventDate, TASK_STATUSES } from '../utils/validators'
 
-// "Hecho" no aparece en Hoy (el backend excluye las gestiones terminadas)
 const STATUS_FILTER_OPTIONS = TASK_STATUSES.filter((status) => status.value !== 'done')
 
-// Jerarquía de urgencia: el orden de este arreglo es el orden en pantalla
 const GROUPS = [
   {
     key: 'overdue',
@@ -47,7 +47,6 @@ const GROUPS = [
 
 const hoursFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 })
 
-// Texto relativo a hoy: "hace 3 días", "mañana", "en 4 días"
 function describeRelativeDate(groupKey, scheduledDate, today) {
   const diff = daysBetween(today, scheduledDate)
   if (groupKey === 'overdue') return diff === -1 ? 'ayer' : `hace ${-diff} días`
@@ -55,13 +54,12 @@ function describeRelativeDate(groupKey, scheduledDate, today) {
   return null
 }
 
-// "viernes, 02/Oct/2026": día de la semana + el formato único de fechas de la app
 function formatLongDate(isodate) {
   const weekday = new Date(`${isodate}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long' })
   return `${weekday}, ${formatDateFromISO(isodate)}`
 }
 
-function TodayCard({ task, group, today, eventDate, onReschedule }) {
+function TodayCard({ task, group, today, eventDate, onReschedule, onMarkDone, onRequestPostpone }) {
   const relative = describeRelativeDate(group.key, task.scheduled_date, today)
   const hours = hoursFormatter.format(Number(task.estimated_hours))
   const afterEvent = isAfterEventDate(task, eventDate)
@@ -80,7 +78,6 @@ function TodayCard({ task, group, today, eventDate, onReschedule }) {
       </Link>
 
       <div className="today-card-meta">
-        {/* Selector de reprogramación rápido */}
         <label className="today-meta-item" style={{ cursor: 'pointer' }} title="Cambiar fecha objetivo">
           <IconCalendar size={14} />
           <span>
@@ -102,12 +99,43 @@ function TodayCard({ task, group, today, eventDate, onReschedule }) {
         <span className="task-status-chip">{getOptionLabel(TASK_STATUSES, task.status)}</span>
       </div>
 
+      {task.note && (
+        <p className="field-hint" style={{ marginTop: '8px', fontStyle: 'italic', color: '#64748b' }}>
+          <strong>Nota:</strong> {task.note}
+        </p>
+      )}
+
       {afterEvent && <DateWarning eventDate={eventDate} />}
+
+      <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+        <button
+          type="button"
+          className="btn-submit-pro btn-small"
+          style={{ padding: '4px 10px', fontSize: '12px' }}
+          onClick={() => onMarkDone(task)}
+          title="Marcar como hecha (completada)"
+        >
+          <IconCheckCircle size={14} style={{ marginRight: '4px' }} />
+          Hecha
+        </button>
+
+        {task.status !== 'postponed' && (
+          <button
+            type="button"
+            className="btn-sec-pro btn-small"
+            style={{ padding: '4px 10px', fontSize: '12px' }}
+            onClick={() => onRequestPostpone(task)}
+            title="Posponer gestión con nota explicativa"
+          >
+            Posponer
+          </button>
+        )}
+      </div>
     </li>
   )
 }
 
-function TodayGroup({ group, items, today, windowDays, eventDateById }) {
+function TodayGroup({ group, items, today, windowDays, eventDateById, onReschedule, onMarkDone, onRequestPostpone }) {
   const titleId = `today-group-${group.key}`
   const title = group.key === 'upcoming' ? `${group.title} (${windowDays} días)` : group.title
 
@@ -133,6 +161,9 @@ function TodayGroup({ group, items, today, windowDays, eventDateById }) {
               group={group}
               today={today}
               eventDate={eventDateById.get(task.event_id)}
+              onReschedule={onReschedule}
+              onMarkDone={onMarkDone}
+              onRequestPostpone={onRequestPostpone}
             />
           ))}
         </ul>
@@ -202,15 +233,15 @@ export default function Today() {
   const hasFilters = Boolean(eventFilter || statusFilter)
 
   const [events, setEvents] = useState([])
-
-  // Cada combinación de filtros + reintento es una petición distinta.
-  // "Cargando" = la respuesta de la petición actual aún no ha llegado.
   const [attempt, setAttempt] = useState(0)
   const requestKey = `${eventFilter}|${statusFilter}|${attempt}`
   const [result, setResult] = useState({ key: null, data: null, error: null })
 
+  const [conflictState, setConflictState] = useState(null)
+  const [postponeState, setPostponeState] = useState(null)
+  const [toast, setToast] = useState(null)
+
   useEffect(() => {
-    // Si el usuario cambia de filtro antes de que termine, la petición vieja se cancela
     const controller = new AbortController()
     apiFetch('/api/today/', {
       params: { event: eventFilter, status: statusFilter },
@@ -227,16 +258,6 @@ export default function Today() {
   const { data, error } = result
   const loadToday = () => setAttempt((n) => n + 1)
 
-  // Al volver a la pestaña se recargan los datos: pudieron cambiar en otra pestaña o dispositivo
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') setAttempt((n) => n + 1)
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [])
-
-  // Opciones del filtro por evento; si fallan, el filtro queda solo con "Todos"
   useEffect(() => {
     apiFetch('/api/events/')
       .then((result) => setEvents(Array.isArray(result) ? result : []))
@@ -257,8 +278,77 @@ export default function Today() {
     ? GROUPS.reduce((sum, group) => sum + (data[group.key]?.length || 0), 0)
     : 0
 
-  // Fecha de cada evento, para avisar si una gestión quedó después de su evento
   const eventDateById = new Map(events.map((ev) => [ev.id, ev.event_date]))
+
+  const showUndoToast = (subtask, previousDate, message) => {
+    if (toast?.timerId) clearTimeout(toast.timerId)
+    const timerId = setTimeout(() => setToast(null), 6000)
+    setToast({ message, subtask, previousDate, timerId })
+  }
+
+  const handleUndo = async () => {
+    if (!toast) return
+    const { subtask, previousDate, timerId } = toast
+    clearTimeout(timerId)
+    setToast(null)
+
+    try {
+      await apiFetch(`/api/subtasks/${subtask.id}/`, {
+        method: 'PATCH',
+        body: { scheduled_date: previousDate, confirm_overload: true },
+      })
+      loadToday()
+    } catch (err) {
+      console.error('Error al deshacer reprogramación:', err)
+    }
+  }
+
+  const handleReschedule = async (task, newDate) => {
+    const previousDate = task.scheduled_date
+    if (newDate === previousDate) return
+
+    try {
+      await apiFetch(`/api/subtasks/${task.id}/`, {
+        method: 'PATCH',
+        body: { scheduled_date: newDate },
+      })
+      loadToday()
+      showUndoToast(task, previousDate, `Gestión reprogramada al ${formatDateFromISO(newDate)}`)
+    } catch (err) {
+      if (err.status === 409 && err.details) {
+        setConflictState({
+          subtask: task,
+          conflictData: err.details,
+          eventDate: eventDateById.get(task.event_id),
+        })
+      } else {
+        alert(err.message || 'No pudimos reprogramar la gestión.')
+      }
+    }
+  }
+
+  const handleMarkDone = async (task) => {
+    try {
+      await apiFetch(`/api/subtasks/${task.id}/`, {
+        method: 'PATCH',
+        body: { status: 'done' },
+      })
+      loadToday()
+      showUndoToast(task, task.scheduled_date, `¡Gestión "${task.name}" completada!`)
+    } catch (err) {
+      alert(err.message || 'No se pudo marcar la gestión como completada.')
+    }
+  }
+
+  const handleConfirmPostpone = async (task, note) => {
+    await apiFetch(`/api/subtasks/${task.id}/`, {
+      method: 'PATCH',
+      body: { status: 'postponed', note },
+    })
+    setPostponeState(null)
+    loadToday()
+    showUndoToast(task, task.scheduled_date, `Gestión "${task.name}" pospuesta.`)
+  }
 
   const renderGroups = () => (
     <div className="today-groups">
@@ -270,6 +360,9 @@ export default function Today() {
           eventDateById={eventDateById}
           today={data.today}
           windowDays={windowDays}
+          onReschedule={handleReschedule}
+          onMarkDone={handleMarkDone}
+          onRequestPostpone={(task) => setPostponeState(task)}
         />
       ))}
     </div>
@@ -277,8 +370,6 @@ export default function Today() {
 
   let content
   if (isLoading) {
-    // Al cambiar un filtro se difuminan las gestiones que ya estaban en pantalla;
-    // en la primera carga se difumina una silueta de la vista
     content = (
       <LoadingOverlay label="Cargando tus gestiones...">
         {total > 0 ? renderGroups() : <TodaySkeleton />}
@@ -320,73 +411,6 @@ export default function Today() {
     )
   } else {
     content = renderGroups()
-  }
-
-  const [conflictState, setConflictState] = useState(null)
-  // { subtask, conflictData, eventDate }
-
-  // Notificación tipo toast con opción de "Deshacer" (US-06)
-  const [toast, setToast] = useState(null)
-  // { message, subtask, previousDate, timerId }
-
-  const showUndoToast = (subtask, previousDate, message) => {
-    if (toast?.timerId) clearTimeout(toast.timerId)
-
-    const timerId = setTimeout(() => {
-      setToast(null)
-    }, 6000)
-
-    setToast({
-      message,
-      subtask,
-      previousDate,
-      timerId,
-    })
-  }
-
-  const handleUndo = async () => {
-    if (!toast) return
-    const { subtask, previousDate, timerId } = toast
-    clearTimeout(timerId)
-    setToast(null)
-
-    try {
-      await apiFetch(`/api/subtasks/${subtask.id}/`, {
-        method: 'PATCH',
-        body: { scheduled_date: previousDate, confirm_overload: true },
-      })
-      loadToday()
-    } catch (err) {
-      console.error('Error al deshacer reprogramación:', err)
-    }
-  }
-
-  // Función para reprogramar una subtarea
-  const handleReschedule = async (task, newDate) => {
-    const previousDate = task.scheduled_date
-    if (newDate === previousDate) return
-
-    try {
-      const updated = await apiFetch(`/api/subtasks/${task.id}/`, {
-        method: 'PATCH',
-        body: { scheduled_date: newDate },
-      })
-
-      // Actualizar vista reactivamente y mostrar toast con "Deshacer"
-      loadToday()
-      showUndoToast(task, previousDate, `Gestión reprogramada al ${formatDateFromISO(newDate)}`)
-    } catch (err) {
-      if (err.status === 409 && err.details) {
-        // CONFLICTO DETECTADO (US-07) -> Abrir modal asistido
-        setConflictState({
-          subtask: task,
-          conflictData: err.details,
-          eventDate: eventDateById.get(task.event_id),
-        })
-      } else {
-        alert(err.message || 'No pudimos reprogramar la gestión.')
-      }
-    }
   }
 
   return (
@@ -447,14 +471,21 @@ export default function Today() {
           Hoy es <strong>{formatLongDate(data.today)}</strong>
         </p>
       )}
-      
+
+      {/* Disposición con panel de Resumen y contenido centrable en su columna */}
       <div className="today-layout">
-        <div aria-busy={isLoading}>{content}</div>
+        <div
+          className="today-main-column"
+          aria-busy={isLoading}
+          style={{ width: '100%' }}
+        >
+          {content}
+        </div>
         {data?.today && !error && (
           <TodaySummary data={data} events={events} windowDays={windowDays} />
         )}
       </div>
-      {/* Toast emergente de confirmación con Deshacer (US-06) */}
+
       {toast && (
         <div
           className="banner-alert banner-success"
@@ -480,7 +511,6 @@ export default function Today() {
         </div>
       )}
 
-      {/* Modal de resolución de conflicto de sobrecarga (US-07 & US-08) */}
       <OverloadConflictModal
         isOpen={Boolean(conflictState)}
         conflictData={conflictState?.conflictData}
@@ -489,13 +519,16 @@ export default function Today() {
         onResolved={(updatedTask, message) => {
           setConflictState(null)
           loadToday()
-          showUndoToast(
-            updatedTask,
-            conflictState?.subtask?.scheduled_date,
-            message
-          )
+          showUndoToast(updatedTask, conflictState?.subtask?.scheduled_date, message)
         }}
         onCancel={() => setConflictState(null)}
+      />
+
+      <PostponeModal
+        isOpen={Boolean(postponeState)}
+        subtask={postponeState}
+        onConfirm={handleConfirmPostpone}
+        onCancel={() => setPostponeState(null)}
       />
     </div>
   )

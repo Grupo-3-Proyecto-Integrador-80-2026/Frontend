@@ -5,6 +5,7 @@ import {
   IconClock,
   IconPlus,
   IconCalendarDays,
+  IconBarChart,
   IconUser,
   IconLogOut,
 } from './Icons'
@@ -15,12 +16,12 @@ const NAV_ITEMS = [
   { to: '/hoy', label: 'Hoy', Icon: IconClock },
   { to: '/crear', label: 'Crear evento', Icon: IconPlus },
   { to: '/eventos', label: 'Eventos', Icon: IconCalendarDays },
+  { to: '/progreso', label: 'Progreso', Icon: IconBarChart },
 ]
 
 export default function Sidebar({ isMobileOpen, onCloseMobile }) {
   const { user, logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  // El useState va AQUÍ ADENTRO:
   const [isLimitModalOpen, setIsLimitModalOpen] = useState(false)
 
   const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email
@@ -32,7 +33,6 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
 
   return (
     <>
-      {/* Backdrop móvil */}
       {isMobileOpen && (
         <div
           className="mobile-backdrop"
@@ -51,7 +51,6 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
 
       <aside className={`main-sidebar ${isMobileOpen ? 'open' : ''}`}>
         <div className="sidebar-top">
-          {/* Marca */}
           <div className="brand-header">
             <div className="brand-logo-box" aria-hidden="true">
               <IconCalendar size={22} />
@@ -62,7 +61,6 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
             </div>
           </div>
 
-          {/* Menú vertical de navegación */}
           <nav className="sidebar-nav" aria-label="Navegación principal">
             {NAV_ITEMS.map(({ to, label, Icon }) => (
               <NavLink
@@ -78,44 +76,47 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
           </nav>
         </div>
 
-        {/* Perfil del organizador autenticado con configuración US-12 */}
         <div className="sidebar-bottom">
-          <div className="profile-card">
-            <div className="profile-avatar" aria-hidden="true">
-              <IconUser size={16} />
-            </div>
-            <div className="profile-info">
-              <p className="profile-name">{fullName}</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <p className="profile-limit" style={{ margin: 0 }}>
-                  Límite: {user?.daily_hours_limit ?? 6} h/día
-                </p>
-                <button
-                  type="button"
-                  className="btn-sec-pro btn-small"
-                  style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', cursor: 'pointer' }}
-                  onClick={() => setIsLimitModalOpen(true)}
-                  title="Cambiar límite diario de horas (US-12)"
-                >
-                  Cambiar
-                </button>
+          <div className="profile-container">
+            {/* Fila 1: Usuario y Logout */}
+            <div className="profile-user-row">
+              <div className="profile-avatar" aria-hidden="true">
+                <IconUser size={16} />
               </div>
+              <div className="profile-info truncate">
+                <p className="profile-name truncate" title={fullName}>{fullName}</p>
+              </div>
+              <button
+                type="button"
+                className="btn-logout"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                aria-label="Cerrar sesión"
+                title="Cerrar sesión"
+              >
+                <IconLogOut size={16} />
+              </button>
             </div>
+
+            {/* Fila 2: Chip / Botón de límite diario */}
             <button
               type="button"
-              className="btn-logout"
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              aria-label="Cerrar sesión"
-              title="Cerrar sesión"
+              className="btn-limit-card"
+              onClick={() => setIsLimitModalOpen(true)}
+              title="Click para cambiar el límite diario de horas"
             >
-              <IconLogOut size={18} />
+              <div className="btn-limit-left">
+                <IconClock size={14} className="icon-limit" />
+                <span>Límite diario:</span>
+              </div>
+              <span className="limit-value-badge">
+                {user?.daily_hours_limit ?? 6}h / día
+              </span>
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Modal para configurar límite diario (US-12) */}
       <DailyLimitModal
         isOpen={isLimitModalOpen}
         onClose={() => setIsLimitModalOpen(false)}

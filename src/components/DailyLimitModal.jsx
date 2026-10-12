@@ -73,7 +73,7 @@ export default function DailyLimitModal({ isOpen, onClose }) {
         })
         setTimeout(() => {
           onClose()
-        }, 12000)
+        }, 3000)
       }
 
     } catch (err) {
