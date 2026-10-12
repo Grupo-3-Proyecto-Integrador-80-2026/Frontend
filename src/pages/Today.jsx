@@ -1,5 +1,4 @@
-// Ruta: src/pages/Today.jsx
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   IconAlertTriangle,
@@ -18,6 +17,7 @@ import PostponeModal from '../components/PostponeModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
 import { apiFetch } from '../api/client'
 import { daysBetween, formatDateFromISO, getOptionLabel, isAfterEventDate, TASK_STATUSES } from '../utils/validators'
+import { useAuth } from '../auth/AuthContext'
 
 const STATUS_FILTER_OPTIONS = TASK_STATUSES.filter((status) => status.value !== 'done')
 
@@ -63,6 +63,17 @@ function TodayCard({ task, group, today, eventDate, onReschedule, onMarkDone, on
   const relative = describeRelativeDate(group.key, task.scheduled_date, today)
   const hours = hoursFormatter.format(Number(task.estimated_hours))
   const afterEvent = isAfterEventDate(task, eventDate)
+  const dateInputRef = useRef(null)
+
+  const triggerPicker = () => {
+    if (!dateInputRef.current) return
+    try {
+      dateInputRef.current.showPicker()
+    } catch {
+      dateInputRef.current.focus()
+      dateInputRef.current.click()
+    }
+  }
 
   return (
     <li className={`today-card today-card-${group.key} ${afterEvent ? 'card-date-warning' : ''}`}>
@@ -78,19 +89,46 @@ function TodayCard({ task, group, today, eventDate, onReschedule, onMarkDone, on
       </Link>
 
       <div className="today-card-meta">
-        <label className="today-meta-item" style={{ cursor: 'pointer' }} title="Cambiar fecha objetivo">
-          <IconCalendar size={14} />
-          <span>
-            {formatDateFromISO(task.scheduled_date)}
-            {relative && <span className="today-meta-relative"> · {relative}</span>}
-          </span>
+        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="today-meta-item"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              font: 'inherit',
+              cursor: 'pointer',
+              color: 'inherit',
+            }}
+            onClick={triggerPicker}
+            title="Haz clic para reprogramar fecha"
+            aria-label={`Fecha actual: ${formatDateFromISO(task.scheduled_date)}. Haz clic para cambiarla`}
+          >
+            <IconCalendar size={14} />
+            <span>
+              {formatDateFromISO(task.scheduled_date)}
+              {relative && <span className="today-meta-relative"> · {relative}</span>}
+            </span>
+          </button>
           <input
+            ref={dateInputRef}
             type="date"
             value={task.scheduled_date}
             onChange={(e) => onReschedule(task, e.target.value)}
-            style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+            style={{
+              position: 'absolute',
+              opacity: 0,
+              pointerEvents: 'none',
+              width: '1px',
+              height: '1px',
+              bottom: 0,
+              left: 0,
+            }}
+            tabIndex={-1}
+            aria-hidden="true"
           />
-        </label>
+        </div>
 
         <span className="today-meta-item">
           <IconClock size={14} />
@@ -113,7 +151,7 @@ function TodayCard({ task, group, today, eventDate, onReschedule, onMarkDone, on
           className="btn-submit-pro btn-small"
           style={{ padding: '4px 10px', fontSize: '12px' }}
           onClick={() => onMarkDone(task)}
-          title="Marcar como hecha (completada)"
+          title="Marcar como hecha"
         >
           <IconCheckCircle size={14} style={{ marginRight: '4px' }} />
           Hecha
@@ -227,6 +265,9 @@ function TodaySummary({ data, events, windowDays }) {
 }
 
 export default function Today() {
+  const { user } = useAuth()
+  const userDailyLimit = user?.daily_hours_limit ?? 6
+
   const [searchParams, setSearchParams] = useSearchParams()
   const eventFilter = searchParams.get('event') || ''
   const statusFilter = searchParams.get('status') || ''
@@ -234,12 +275,19 @@ export default function Today() {
 
   const [events, setEvents] = useState([])
   const [attempt, setAttempt] = useState(0)
-  const requestKey = `${eventFilter}|${statusFilter}|${attempt}`
+  const requestKey = `${eventFilter}|${statusFilter}|${userDailyLimit}|${attempt}`
   const [result, setResult] = useState({ key: null, data: null, error: null })
 
   const [conflictState, setConflictState] = useState(null)
   const [postponeState, setPostponeState] = useState(null)
   const [toast, setToast] = useState(null)
+  const toastTimerRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -260,7 +308,7 @@ export default function Today() {
 
   useEffect(() => {
     apiFetch('/api/events/')
-      .then((result) => setEvents(Array.isArray(result) ? result : []))
+      .then((res) => setEvents(Array.isArray(res) ? res : []))
       .catch(() => setEvents([]))
   }, [])
 
@@ -280,26 +328,31 @@ export default function Today() {
 
   const eventDateById = new Map(events.map((ev) => [ev.id, ev.event_date]))
 
-  const showUndoToast = (subtask, previousDate, message) => {
-    if (toast?.timerId) clearTimeout(toast.timerId)
-    const timerId = setTimeout(() => setToast(null), 6000)
-    setToast({ message, subtask, previousDate, timerId })
+  const showUndoToast = (subtask, previousState, message) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 6000)
+    setToast({ message, subtask, previousState })
   }
 
   const handleUndo = async () => {
     if (!toast) return
-    const { subtask, previousDate, timerId } = toast
-    clearTimeout(timerId)
+    const { subtask, previousState } = toast
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast(null)
 
     try {
       await apiFetch(`/api/subtasks/${subtask.id}/`, {
         method: 'PATCH',
-        body: { scheduled_date: previousDate, confirm_overload: true },
+        body: {
+          scheduled_date: previousState.scheduled_date,
+          status: previousState.status,
+          note: previousState.note,
+          confirm_overload: true,
+        },
       })
       loadToday()
     } catch (err) {
-      console.error('Error al deshacer reprogramación:', err)
+      alert(err.message || 'No se pudo deshacer la acción.')
     }
   }
 
@@ -307,13 +360,19 @@ export default function Today() {
     const previousDate = task.scheduled_date
     if (newDate === previousDate) return
 
+    const previousSnapshot = {
+      scheduled_date: task.scheduled_date,
+      status: task.status,
+      note: task.note,
+    }
+
     try {
       await apiFetch(`/api/subtasks/${task.id}/`, {
         method: 'PATCH',
         body: { scheduled_date: newDate },
       })
       loadToday()
-      showUndoToast(task, previousDate, `Gestión reprogramada al ${formatDateFromISO(newDate)}`)
+      showUndoToast(task, previousSnapshot, `Gestión reprogramada al ${formatDateFromISO(newDate)}`)
     } catch (err) {
       if (err.status === 409 && err.details) {
         setConflictState({
@@ -328,26 +387,42 @@ export default function Today() {
   }
 
   const handleMarkDone = async (task) => {
+    const previousSnapshot = {
+      scheduled_date: task.scheduled_date,
+      status: task.status,
+      note: task.note,
+    }
+
     try {
       await apiFetch(`/api/subtasks/${task.id}/`, {
         method: 'PATCH',
         body: { status: 'done' },
       })
       loadToday()
-      showUndoToast(task, task.scheduled_date, `¡Gestión "${task.name}" completada!`)
+      showUndoToast(task, previousSnapshot, `¡Gestión "${task.name}" completada!`)
     } catch (err) {
       alert(err.message || 'No se pudo marcar la gestión como completada.')
     }
   }
 
   const handleConfirmPostpone = async (task, note) => {
-    await apiFetch(`/api/subtasks/${task.id}/`, {
-      method: 'PATCH',
-      body: { status: 'postponed', note },
-    })
-    setPostponeState(null)
-    loadToday()
-    showUndoToast(task, task.scheduled_date, `Gestión "${task.name}" pospuesta.`)
+    const previousSnapshot = {
+      scheduled_date: task.scheduled_date,
+      status: task.status,
+      note: task.note,
+    }
+
+    try {
+      await apiFetch(`/api/subtasks/${task.id}/`, {
+        method: 'PATCH',
+        body: { status: 'postponed', note },
+      })
+      setPostponeState(null)
+      loadToday()
+      showUndoToast(task, previousSnapshot, `Gestión "${task.name}" pospuesta.`)
+    } catch (err) {
+      alert(err.message || 'No se pudo posponer la gestión.')
+    }
   }
 
   const renderGroups = () => (
@@ -472,13 +547,8 @@ export default function Today() {
         </p>
       )}
 
-      {/* Disposición con panel de Resumen y contenido centrable en su columna */}
       <div className="today-layout">
-        <div
-          className="today-main-column"
-          aria-busy={isLoading}
-          style={{ width: '100%' }}
-        >
+        <div className="today-main-column" aria-busy={isLoading} style={{ width: '100%' }}>
           {content}
         </div>
         {data?.today && !error && (
@@ -517,9 +587,14 @@ export default function Today() {
         subtask={conflictState?.subtask}
         eventDate={conflictState?.eventDate}
         onResolved={(updatedTask, message) => {
+          const prev = conflictState?.subtask
           setConflictState(null)
           loadToday()
-          showUndoToast(updatedTask, conflictState?.subtask?.scheduled_date, message)
+          showUndoToast(
+            updatedTask,
+            { scheduled_date: prev?.scheduled_date, status: prev?.status, note: prev?.note },
+            message
+          )
         }}
         onCancel={() => setConflictState(null)}
       />

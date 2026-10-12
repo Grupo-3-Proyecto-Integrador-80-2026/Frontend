@@ -25,7 +25,6 @@ export default function OverloadConflictModal({
   const attemptedHours = Number(conflictData.subtask_hours || subtask?.estimated_hours || 1)
   const maxAllowedSameDay = Math.max(0, limitHours - plannedHours)
 
-  // Si la tarea individual supera el límite total diario, no cabe en ningún día sin reducir horas
   const taskExceedsLimitEntirely = attemptedHours > limitHours
 
   const [selectedAction, setSelectedAction] = useState(taskExceedsLimitEntirely ? 'reduce' : 'move')
@@ -42,32 +41,30 @@ export default function OverloadConflictModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
-  // Cálculo en vivo corregido
   const liveCalculation = useMemo(() => {
     if (selectedAction === 'move') {
-      // Si la tarea sola ya supera el límite diario, moverla a otro día NO la soluciona
       if (taskExceedsLimitEntirely) {
         return {
           date: targetDate,
           hours: attemptedHours,
           projected: attemptedHours,
           isOverloaded: true,
-          message: `Esta gestión tiene ${attemptedHours}h y supera tu límite total de ${limitHours}h/día. No cabrá en ningún día a menos que reduzcas sus horas.`,
+          message: `Esta gestión tiene ${attemptedHours}h y supera tu límite total de ${limitHours}h/día. Reduce sus horas para que sea viable.`,
         }
       }
 
       const isSameDate = targetDate === conflictData.date
       const projected = isSameDate ? plannedHours + attemptedHours : attemptedHours
-      const isOverloaded = projected > limitHours
+      const isOverloaded = isSameDate ? projected > limitHours : false
 
       return {
         date: targetDate,
         hours: attemptedHours,
         projected,
         isOverloaded,
-        message: isOverloaded
+        message: isSameDate
           ? `Carga resultante: ${projected}h (supera el límite de ${limitHours}h)`
-          : `Carga resultante viable: ${projected}h de ${limitHours}h permitidas`,
+          : `Asignando ${attemptedHours}h al ${formatDateFromISO(targetDate)}`,
       }
     } else {
       const numHours = Number(reducedHours) || 0
@@ -80,7 +77,7 @@ export default function OverloadConflictModal({
         projected,
         isOverloaded,
         message: isOverloaded
-          ? `Carga resultante: ${projected}h (supera el límite de ${limitHours}h o valor no válido)`
+          ? `Carga resultante: ${projected}h (supera el límite de ${limitHours}h o valor inválido)`
           : `Carga resultante viable: ${projected}h de ${limitHours}h permitidas`,
       }
     }
@@ -132,7 +129,7 @@ export default function OverloadConflictModal({
       )
     } catch (err) {
       if (err.status === 409 && err.details) {
-        setErrorMessage(err.message || 'La fecha seleccionada aún supera el límite diario.')
+        setErrorMessage(err.message || 'La fecha seleccionada también supera el límite diario.')
       } else {
         setErrorMessage(err.message || 'No pudimos aplicar la solución al conflicto.')
       }
@@ -297,7 +294,7 @@ export default function OverloadConflictModal({
             >
               {taskExceedsLimitEntirely ? (
                 <div style={{ color: '#b45309', fontSize: '12px', lineHeight: 1.4 }}>
-                  <strong>Aviso:</strong> Esta gestión sola dura <strong>{attemptedHours}h</strong>, lo cual supera tu límite diario completo de <strong>{limitHours}h</strong>. Cambiarla de día no resolverá el problema a menos que reduzcas sus horas en la pestaña "2. Reducir horas".
+                  <strong>Aviso:</strong> Esta gestión sola dura <strong>{attemptedHours}h</strong>, lo cual supera tu límite diario completo de <strong>{limitHours}h</strong>. Pasa a la pestaña "2. Reducir horas" para continuar.
                 </div>
               ) : (
                 <>
@@ -391,7 +388,6 @@ export default function OverloadConflictModal({
           )}
         </div>
 
-        {/* Indicador de recálculo en vivo */}
         <div
           style={{
             padding: '10px 12px',
@@ -414,7 +410,7 @@ export default function OverloadConflictModal({
             )}
             <span>{liveCalculation.message}</span>
           </div>
-          <strong>{liveCalculation.isOverloaded ? 'Conflicto persistente' : 'Conflicto resuelto'}</strong>
+          <strong>{liveCalculation.isOverloaded ? 'Conflicto persistente' : 'Solución viable'}</strong>
         </div>
 
         <div
@@ -449,7 +445,7 @@ export default function OverloadConflictModal({
               Cancelar
             </button>
             <button
-              type="button"
+              type="submit"
               className="btn-submit-pro"
               disabled={liveCalculation.isOverloaded || isSubmitting}
               onClick={() => {
