@@ -14,6 +14,8 @@ import {
   IconAlertTriangle,
   IconX,
   IconRefresh,
+  IconEdit,
+  IconTrash,
 } from '../components/Icons'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DateField from '../components/DateField'
@@ -1155,24 +1157,89 @@ export default function EventDetail() {
               }
 
               const afterEvent = isAfterEventDate(task, event.event_date)
+              const isTaskDone = task.status === 'done'
+              const isTaskPostponed = task.status === 'postponed'
+
               return (
-                <div key={task.id} className={`event-card-item ${afterEvent ? 'card-date-warning' : ''}`}>
-                  <div className="event-card-top">
-                    <span className={`event-status-badge ${task.status === 'done' ? 'badge-complete' : ''}`}>
+                <div key={task.id} className={`event-card-item ${afterEvent ? 'card-date-warning' : ''}`} style={{ position: 'relative' }}>
+                  {/* Cabecera: Badge de estado + Acciones discretas (Editar / Eliminar) */}
+                  <div className="event-card-top" style={{ alignItems: 'center' }}>
+                    <span className={`event-status-badge ${isTaskDone ? 'badge-complete' : ''}`}>
                       {getOptionLabel(TASK_STATUSES, task.status)}
                     </span>
-                    <span className="event-date">
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditSubtask(task)}
+                        title="Editar gestión"
+                        aria-label={`Editar gestión ${task.name}`}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          padding: '5px',
+                          cursor: 'pointer',
+                          borderRadius: '6px',
+                          color: '#475569',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'background-color 0.2s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      >
+                        <IconEdit size={16} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRequestDeleteSubtask(task)}
+                        title="Eliminar gestión"
+                        aria-label={`Eliminar gestión ${task.name}`}
+                        style={{
+                          background: '#fff1f2',
+                          border: '1px solid #fecdd3',
+                          padding: '5px',
+                          cursor: 'pointer',
+                          borderRadius: '6px',
+                          color: '#e11d48',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#ffe4e6'
+                          e.currentTarget.style.borderColor = '#fda4af'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#fff1f2'
+                          e.currentTarget.style.borderColor = '#fecdd3'
+                        }}
+                      >
+                        <IconTrash size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Título de la gestión y fecha objetivo */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '4px' }}>
+                    <h3 className="event-name" style={{ margin: 0, fontSize: '16px' }}>{task.name}</h3>
+                    <span className="event-date" style={{ fontSize: '13px' }}>
                       <IconCalendar size={13} />
                       <span>{task.scheduled_date ? formatDateFromISO(task.scheduled_date) : 'N/A'}</span>
                     </span>
                   </div>
 
-                  <h3 className="event-name">{task.name}</h3>
-                  <p className="event-client">Tipo: {getOptionLabel(TASK_TYPES, task.type)}</p>
+                  <p className="event-client" style={{ marginTop: '4px' }}>
+                    Tipo: {getOptionLabel(TASK_TYPES, task.type)}
+                  </p>
 
                   {afterEvent && <DateWarning eventDate={event.event_date} />}
 
-                  <div className="event-details-list">
+                  {/* Metadatos: Horas y Prioridad */}
+                  <div className="event-details-list" style={{ marginTop: '8px' }}>
                     <div className="event-detail-row">
                       <IconClock size={14} />
                       <span>Horas: {task.estimated_hours} hrs</span>
@@ -1189,50 +1256,48 @@ export default function EventDetail() {
                     </p>
                   )}
 
-                  {/* Acciones de ejecución rápida (US-09) */}
-                  <div className="event-card-footer" style={{ flexDirection: 'column', gap: '8px', alignItems: 'stretch' }}>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      {task.status !== 'done' && (
-                        <button
-                          type="button"
-                          className="btn-submit-pro btn-small"
-                          style={{ flex: 1, padding: '4px 8px', fontSize: '12px' }}
-                          onClick={() => handleMarkDone(task)}
-                          title="Marcar gestión como hecha"
-                        >
-                          <IconCheckCircle size={13} style={{ marginRight: '4px' }} />
-                          Hecha
-                        </button>
-                      )}
-
-                      {/* Solo se puede posponer si NO está hecha y NO está ya pospuesta */}
-                      {task.status !== 'done' && task.status !== 'postponed' && (
-                        <button
-                          type="button"
-                          className="btn-sec-pro btn-small"
-                          style={{ flex: 1, padding: '4px 8px', fontSize: '12px' }}
-                          onClick={() => setPostponeState(task)}
-                          title="Posponer gestión con nota explicativa"
-                        >
-                          Posponer
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="event-card-actions" style={{ justifyContent: 'flex-end', marginTop: '4px' }}>
+                  {/* Botones inferiores limpios y simétricos (Hecha / Posponer) */}
+                  <div className="event-card-footer" style={{ marginTop: '16px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
                       <button
                         type="button"
-                        className="btn-manage-event"
-                        onClick={() => handleStartEditSubtask(task)}
+                        className="btn-submit-pro"
+                        style={{
+                          flex: 1,
+                          padding: '6px 12px',
+                          fontSize: '13px',
+                          justifyContent: 'center',
+                          opacity: isTaskDone ? 0.6 : 1,
+                        }}
+                        onClick={() => handleMarkDone(task)}
+                        disabled={isTaskDone}
+                        title={isTaskDone ? 'Gestión ya completada' : 'Marcar gestión como hecha'}
                       >
-                        Editar
+                        <IconCheckCircle size={14} style={{ marginRight: '6px' }} />
+                        {isTaskDone ? 'Completada' : 'Hecha'}
                       </button>
+
                       <button
                         type="button"
-                        className="btn-danger-ghost"
-                        onClick={() => handleRequestDeleteSubtask(task)}
+                        className="btn-sec-pro"
+                        style={{
+                          flex: 1,
+                          padding: '6px 12px',
+                          fontSize: '13px',
+                          justifyContent: 'center',
+                          opacity: (isTaskDone || isTaskPostponed) ? 0.6 : 1,
+                        }}
+                        onClick={() => setPostponeState(task)}
+                        disabled={isTaskDone || isTaskPostponed}
+                        title={
+                          isTaskDone
+                            ? 'No se puede posponer una tarea completada'
+                            : isTaskPostponed
+                            ? 'Ya se encuentra pospuesta'
+                            : 'Posponer gestión con nota explicativa'
+                        }
                       >
-                        Eliminar
+                        {isTaskPostponed ? 'Pospuesta' : 'Posponer'}
                       </button>
                     </div>
                   </div>

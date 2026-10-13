@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   IconClock,
   IconX,
@@ -13,12 +13,8 @@ import { formatDateFromISO } from '../utils/validators'
 const MIN_LIMIT = 1
 const MAX_LIMIT = 16
 const DEFAULT_LIMIT = 6
-const RANGE_ERROR_MESSAGE = 'El límite diario debe ser entre 1 y 16 horas.'
+const RANGE_ERROR_MESSAGE = 'Ingresa un valor entero entre 1 y 16 horas.'
 
-/**
- * Consulta las gestiones activas del usuario y calcula si algún día
- * (hoy o próximos) supera el nuevo límite que el usuario intenta configurar.
- */
 async function checkCurrentOverload(newLimit) {
   try {
     const todayData = await apiFetch('/api/today/')
@@ -26,7 +22,7 @@ async function checkCurrentOverload(newLimit) {
 
     const overloadedDays = []
 
-    // 1. Verificar el día de hoy
+    // 1. Revisar tareas de hoy
     const dueTodayTasks = todayData.due_today || []
     const dueTodayHours = dueTodayTasks.reduce(
       (sum, t) => sum + (Number(t.estimated_hours) || 0),
@@ -37,11 +33,11 @@ async function checkCurrentOverload(newLimit) {
         label: 'Hoy',
         date: todayData.today,
         hours: dueTodayHours,
-        excess: dueTodayHours - newLimit,
+        excess: Math.round((dueTodayHours - newLimit) * 10) / 10,
       })
     }
 
-    // 2. Verificar gestiones en los próximos días
+    // 2. Revisar tareas próximas
     const upcomingTasks = todayData.upcoming || []
     const hoursByDate = {}
     upcomingTasks.forEach((t) => {
@@ -56,8 +52,8 @@ async function checkCurrentOverload(newLimit) {
         overloadedDays.push({
           label: formatDateFromISO(date),
           date,
-          hours,
-          excess: hours - newLimit,
+          hours: Math.round(hours * 10) / 10,
+          excess: Math.round((hours - newLimit) * 10) / 10,
         })
       }
     })
@@ -76,13 +72,6 @@ export default function DailyLimitModal({ isOpen, onClose }) {
   const [errorMsg, setErrorMsg] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState({ type: null, message: '', overloadedDays: [] })
-  const timerRef = useRef(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [])
 
   useEffect(() => {
     if (isOpen) {
@@ -130,32 +119,26 @@ export default function DailyLimitModal({ isOpen, onClose }) {
         updateUser({ daily_hours_limit: data.daily_hours_limit })
       }
 
-      // Analizar si las gestiones actuales causan sobrecarga con el nuevo límite
       const overloaded = await checkCurrentOverload(num)
 
       if (overloaded && overloaded.length > 0) {
         setFeedback({
           type: 'warning',
-          message: 'Límite diario actualizado correctamente.',
+          message: 'Límite actualizado',
           overloadedDays: overloaded,
         })
       } else {
         setFeedback({
           type: 'success',
-          message: 'Límite diario actualizado correctamente.',
+          message: '¡Configuración guardada!',
           overloadedDays: [],
         })
       }
-
-      // Cierre automático suave de 6 segundos si no interactúa
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        onClose()
-      }, 6000)
+      // Nota: Eliminamos el timer de cierre automático. El usuario decide cuándo salir.
     } catch {
       setFeedback({
         type: 'error',
-        message: 'No pudimos guardar tu configuración.',
+        message: 'No se pudo guardar la configuración. Revisa tu conexión.',
         overloadedDays: [],
       })
     } finally {
@@ -163,100 +146,104 @@ export default function DailyLimitModal({ isOpen, onClose }) {
     }
   }
 
-  const handleManualClose = () => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    onClose()
-  }
-
   const isCompleted = feedback.type === 'success' || feedback.type === 'warning'
 
   return (
     <div className="confirm-dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="limit-modal-title">
-      <div className="confirm-dialog" style={{ maxWidth: '460px', textAlign: 'left' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div className="confirm-dialog-icon">
+      <div className="confirm-dialog" style={{ maxWidth: '440px', textAlign: 'left', padding: '24px' }}>
+        
+        {/* Cabecera limpia */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="confirm-dialog-icon" style={{ margin: 0, width: '36px', height: '36px' }}>
               <IconClock size={20} />
             </div>
-            <h2 id="limit-modal-title" className="confirm-dialog-title" style={{ margin: 0 }}>
+            <h2 id="limit-modal-title" className="confirm-dialog-title" style={{ margin: 0, fontSize: '18px' }}>
               Límite diario de gestión
             </h2>
           </div>
           <button
             type="button"
             className="btn-cancel-pro btn-small"
-            onClick={handleManualClose}
-            aria-label="Cerrar modal"
+            style={{ padding: '6px', borderRadius: '50%' }}
+            onClick={onClose}
+            aria-label="Cerrar ventana"
           >
             <IconX size={16} />
           </button>
         </div>
 
-        <p className="field-hint" style={{ marginTop: '12px' }}>
-          Configura cuántas horas máximas al día puedes dedicar a la organización de eventos. Si
-          reprogramas gestiones y superas este límite, el sistema te advertirá sobre la sobrecarga (US-07 / US-08).
+        <p style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+          Define el máximo de horas que dedicas por jornada. Te avisaremos oportunamente si al programar o mover gestiones excedes este tiempo.
         </p>
 
-        {/* FEEDBACK DE ÉXITO SIN SOBRECARGA */}
+        {/* FEEDBACK: ÉXITO */}
         {feedback.type === 'success' && (
-          <div className="banner-alert banner-success" role="status" style={{ margin: '14px 0' }}>
-            <IconCheckCircle size={18} className="icon-emerald" />
-            <div style={{ flex: 1, fontSize: '13px' }}>
-              <strong>{feedback.message}</strong>
-              <p style={{ margin: '4px 0 0 0', color: '#065f46' }}>
-                Tu disponibilidad diaria ahora es de <strong>{limit}h</strong>. Tus gestiones planificadas están dentro de este margen.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* FEEDBACK DE ÉXITO CON ADVERTENCIA DE SOBRECARGA ACTUAL (US-07 / US-12) */}
-        {feedback.type === 'warning' && (
           <div
-            className="banner-alert banner-warning"
             role="status"
             style={{
-              margin: '14px 0',
-              background: '#fffbeb',
-              border: '1px solid #fcd34d',
-              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '12px 14px',
+              backgroundColor: '#ecfdf5',
+              border: '1px solid #a7f3d0',
               borderRadius: '8px',
+              marginBottom: '16px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <IconAlertTriangle
-                size={18}
-                style={{ color: '#d97706', flexShrink: 0, marginTop: '2px' }}
-              />
-              <div style={{ fontSize: '12px', color: '#92400e', lineHeight: '1.4' }}>
-                <strong style={{ display: 'block', color: '#b45309', marginBottom: '4px', fontSize: '13px' }}>
-                  {feedback.message}
-                </strong>
-                <span>
-                  Con tu nuevo límite de <strong>{limit}h/día</strong>, detectamos días que ya tienen sobrecarga planificada:
-                </span>
-                <ul style={{ margin: '6px 0 6px 18px', padding: 0 }}>
-                  {feedback.overloadedDays.map((d) => (
-                    <li key={d.date}>
-                      <strong>{d.label}:</strong> {d.hours}h planificadas (exceso de {d.excess}h).
-                    </li>
-                  ))}
-                </ul>
-                <span style={{ fontStyle: 'italic', display: 'block', marginTop: '4px' }}>
-                  El sistema bloqueará y te asistirá para resolver conflictos cuando muevas o reprogrames tareas en esas fechas.
-                </span>
+            <IconCheckCircle size={20} className="icon-emerald" />
+            <div style={{ fontSize: '13px', color: '#065f46' }}>
+              <strong>{feedback.message}</strong>
+              <div style={{ marginTop: '2px' }}>
+                Tu disponibilidad diaria ahora es de <strong>{limit} horas</strong>.
               </div>
             </div>
           </div>
         )}
 
-        {/* FEEDBACK DE ERROR CON REINTENTO (US-12) */}
-        {feedback.type === 'error' && (
-          <div className="banner-alert banner-error" role="alert" style={{ margin: '14px 0' }}>
-            <IconAlertTriangle size={18} className="icon-rose" />
-            <div style={{ flex: 1 }}>
-              <span>{feedback.message}</span>
+        {/* FEEDBACK: ADVERTENCIA REDISEÑADA (Sin saturar) */}
+        {feedback.type === 'warning' && (
+          <div
+            role="status"
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#fffbeb',
+              border: '1px solid #fde68a',
+              borderRadius: '8px',
+              marginBottom: '16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <IconAlertTriangle size={18} style={{ color: '#d97706', flexShrink: 0 }} />
+              <strong style={{ fontSize: '13px', color: '#92400e' }}>
+                Nuevo límite guardado ({limit}h/día)
+              </strong>
             </div>
+
+            <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#78350f', lineHeight: 1.4 }}>
+              Detectamos que algunas jornadas ya programadas superan esta nueva meta:
+            </p>
+
+            <ul style={{ margin: '0 0 8px 0', paddingLeft: '18px', fontSize: '12px', color: '#92400e' }}>
+              {feedback.overloadedDays.map((d) => (
+                <li key={d.date} style={{ marginBottom: '3px' }}>
+                  <strong>{d.label}:</strong> {d.hours}h planificadas (excede por {d.excess}h)
+                </li>
+              ))}
+            </ul>
+
+            <span style={{ display: 'block', fontSize: '11px', color: '#b45309', fontStyle: 'italic' }}>
+              Al mover o editar tareas en esos días, podrás reprogramarlas con facilidad.
+            </span>
+          </div>
+        )}
+
+        {/* FEEDBACK: ERROR */}
+        {feedback.type === 'error' && (
+          <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '16px' }}>
+            <IconAlertTriangle size={18} className="icon-rose" />
+            <span style={{ flex: 1, fontSize: '13px' }}>{feedback.message}</span>
             <button
               type="button"
               className="btn-alert-retry"
@@ -269,9 +256,10 @@ export default function DailyLimitModal({ isOpen, onClose }) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} noValidate style={{ marginTop: '16px' }}>
-          <div className="field-group">
-            <label htmlFor="daily-hours-limit-input" className="field-label">
+        {/* FORMULARIO */}
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="field-group" style={{ marginBottom: '20px' }}>
+            <label htmlFor="daily-hours-limit-input" className="field-label" style={{ fontWeight: 600 }}>
               Horas diarias permitidas (1 a 16) <span className="req-star">*</span>
             </label>
             <input
@@ -287,25 +275,25 @@ export default function DailyLimitModal({ isOpen, onClose }) {
               autoFocus
               disabled={isSubmitting || isCompleted}
               aria-invalid={isInvalid}
-              aria-describedby={errorMsg ? 'daily-limit-error' : undefined}
+              style={{ fontSize: '15px' }}
             />
             {errorMsg && (
-              <span id="daily-limit-error" className="field-error-text" style={{ display: 'block', marginTop: '6px' }}>
+              <span className="field-error-text" style={{ marginTop: '5px', display: 'block' }}>
                 {errorMsg}
               </span>
             )}
-            <small className="field-hint" style={{ marginTop: '4px', display: 'block' }}>
-              Valor por defecto: 6 horas/día si no se personaliza.
+            <small className="field-hint" style={{ marginTop: '6px', display: 'block' }}>
+              Valor habitual recomendado: 6 horas/día.
             </small>
           </div>
 
-          <div className="confirm-dialog-actions" style={{ marginTop: '24px' }}>
+          <div className="confirm-dialog-actions" style={{ marginTop: '16px' }}>
             {isCompleted ? (
               <button
                 type="button"
                 className="btn-submit-pro"
-                onClick={handleManualClose}
-                style={{ width: '100%' }}
+                onClick={onClose}
+                style={{ width: '100%', justifyContent: 'center' }}
               >
                 Entendido
               </button>
@@ -314,7 +302,7 @@ export default function DailyLimitModal({ isOpen, onClose }) {
                 <button
                   type="button"
                   className="btn-sec-pro"
-                  onClick={handleManualClose}
+                  onClick={onClose}
                   disabled={isSubmitting}
                 >
                   Cancelar
