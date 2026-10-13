@@ -49,7 +49,7 @@ export default function OverloadConflictModal({
           hours: attemptedHours,
           projected: attemptedHours,
           isOverloaded: true,
-          message: `Esta gestión tiene ${attemptedHours}h y supera tu límite total de ${limitHours}h/día. Reduce sus horas para que sea viable.`,
+          message: `Esta gestión dura ${attemptedHours}h y supera tu límite total (${limitHours}h/día).`,
         }
       }
 
@@ -63,8 +63,8 @@ export default function OverloadConflictModal({
         projected,
         isOverloaded,
         message: isSameDate
-          ? `Carga resultante: ${projected}h (supera el límite de ${limitHours}h)`
-          : `Asignando ${attemptedHours}h al ${formatDateFromISO(targetDate)}`,
+          ? `Carga resultante: ${projected}h (supera las ${limitHours}h permitidas)`
+          : `Carga asignada: ${attemptedHours}h para el ${formatDateFromISO(targetDate)}`,
       }
     } else {
       const numHours = Number(reducedHours) || 0
@@ -77,8 +77,8 @@ export default function OverloadConflictModal({
         projected,
         isOverloaded,
         message: isOverloaded
-          ? `Carga resultante: ${projected}h (supera el límite de ${limitHours}h o valor inválido)`
-          : `Carga resultante viable: ${projected}h de ${limitHours}h permitidas`,
+          ? `Carga resultante: ${projected}h (excede el límite de ${limitHours}h)`
+          : `Carga viable: ${projected}h de ${limitHours}h permitidas`,
       }
     }
   }, [
@@ -125,13 +125,13 @@ export default function OverloadConflictModal({
       })
       onResolved(
         result,
-        `Gestión guardada para el ${formatDateFromISO(dateToUse)} con ${attemptedHours}h.`
+        `Gestión programada para el ${formatDateFromISO(dateToUse)} (${attemptedHours}h).`
       )
     } catch (err) {
       if (err.status === 409 && err.details) {
-        setErrorMessage(err.message || 'La fecha seleccionada también supera el límite diario.')
+        setErrorMessage('La fecha elegida también excede tu disponibilidad.')
       } else {
-        setErrorMessage(err.message || 'No pudimos aplicar la solución al conflicto.')
+        setErrorMessage('No se pudo mover la gestión. Inténtalo de nuevo.')
       }
     } finally {
       setIsSubmitting(false)
@@ -141,7 +141,7 @@ export default function OverloadConflictModal({
   const handleResolveByReduce = async () => {
     const numHours = Number(reducedHours)
     if (numHours <= 0) {
-      setErrorMessage('Las horas estimadas deben ser mayores a 0.')
+      setErrorMessage('Las horas deben ser mayores a 0.')
       return
     }
 
@@ -161,10 +161,10 @@ export default function OverloadConflictModal({
       const result = await saveSubtask(payload)
       onResolved(
         result,
-        `Gestión guardada con ${numHours}h para el ${formatDateFromISO(conflictData.date)}.`
+        `Horas ajustadas a ${numHours}h para el ${formatDateFromISO(conflictData.date)}.`
       )
-    } catch (err) {
-      setErrorMessage(err.message || 'No pudimos aplicar el ajuste de horas.')
+    } catch {
+      setErrorMessage('No se pudo ajustar las horas. Revisa los datos e intenta nuevamente.')
     } finally {
       setIsSubmitting(false)
     }
@@ -180,9 +180,9 @@ export default function OverloadConflictModal({
         estimated_hours: attemptedHours,
         status: 'postponed',
       })
-      onResolved(result, 'Gestión guardada como pospuesta (no sumará carga al día).')
-    } catch (err) {
-      setErrorMessage(err.message || 'No pudimos posponer la gestión.')
+      onResolved(result, 'Gestión marcada como pospuesta.')
+    } catch {
+      setErrorMessage('No se pudo posponer la gestión.')
     } finally {
       setIsSubmitting(false)
     }
@@ -200,10 +200,10 @@ export default function OverloadConflictModal({
       })
       onResolved(
         result,
-        `Gestión guardada para el ${formatDateFromISO(conflictData.date)} con sobrecarga confirmada.`
+        `Gestión guardada para el ${formatDateFromISO(conflictData.date)} asumiendo la sobrecarga.`
       )
-    } catch (err) {
-      setErrorMessage(err.message || 'No pudimos confirmar la sobrecarga.')
+    } catch {
+      setErrorMessage('No se pudo guardar la gestión.')
     } finally {
       setIsSubmitting(false)
     }
@@ -211,22 +211,25 @@ export default function OverloadConflictModal({
 
   return (
     <div className="confirm-dialog-overlay" role="dialog" aria-modal="true">
-      <div className="confirm-dialog" style={{ maxWidth: '540px', textAlign: 'left' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <div className="confirm-dialog-icon confirm-dialog-icon-danger">
-            <IconAlertTriangle size={22} />
+      <div className="confirm-dialog" style={{ maxWidth: '480px', textAlign: 'left', padding: '24px', borderRadius: '16px' }}>
+        
+        {/* Cabecera */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+          <div className="confirm-dialog-icon confirm-dialog-icon-danger" style={{ margin: 0, width: '38px', height: '38px' }}>
+            <IconAlertTriangle size={20} />
           </div>
           <div style={{ flex: 1 }}>
             <h2 className="confirm-dialog-title" style={{ margin: 0, fontSize: '18px' }}>
-              Conflicto por sobrecarga diaria
+              Sobrecarga de horas detectada
             </h2>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>
-              {subtask?.name || 'Gestión'}
+            <span style={{ fontSize: '13px', color: '#64748b' }}>
+              {subtask?.name || 'Gestión en curso'}
             </span>
           </div>
           <button
             type="button"
             className="btn-cancel-pro btn-small"
+            style={{ padding: '6px', borderRadius: '50%' }}
             onClick={onCancel}
             aria-label="Cerrar modal"
           >
@@ -234,48 +237,49 @@ export default function OverloadConflictModal({
           </button>
         </div>
 
+        {/* Banner de explicación */}
         <div
-          className="banner-alert banner-warning"
-          style={{ margin: '12px 0', borderRadius: '8px', padding: '12px' }}
+          style={{
+            margin: '0 0 16px 0',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            backgroundColor: '#fffbeb',
+            border: '1px solid #fde68a',
+            fontSize: '13px',
+            color: '#92400e',
+            lineHeight: 1.45,
+          }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <strong style={{ fontSize: '14px', color: '#b45309' }}>
-              {conflictData.message ||
-                `Quedarías con ${conflictData.resulting_hours}h de gestión planificadas (límite ${limitHours}h).`}
-            </strong>
-            <p style={{ margin: 0, fontSize: '12px', color: '#92400e' }}>
-              El día <strong>{formatDateFromISO(conflictData.date)}</strong> ya tiene{' '}
-              <strong>{plannedHours}h</strong> planificadas. Al intentar asignar{' '}
-              <strong>{attemptedHours}h</strong> a esta tarea, la carga acumulada sería de{' '}
-              <strong>{plannedHours + attemptedHours}h</strong> (excedes tu límite de {limitHours}h).
-            </p>
-          </div>
+          El <strong>{formatDateFromISO(conflictData.date)}</strong> ya cuenta con <strong>{plannedHours}h</strong> planificadas. Si sumas las <strong>{attemptedHours}h</strong> de esta tarea, acumularás <strong>{plannedHours + attemptedHours}h</strong> (tu límite diario es de {limitHours}h).
         </div>
 
         {errorMessage && (
-          <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '12px' }}>
+          <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '14px' }}>
             <IconAlertTriangle size={16} className="icon-rose" />
             <span style={{ fontSize: '13px', flex: 1 }}>{errorMessage}</span>
           </div>
         )}
 
-        <div style={{ margin: '16px 0 12px 0' }}>
-          <span className="field-label" style={{ marginBottom: '8px', display: 'block' }}>
-            ¿Cómo deseas resolver este conflicto?
+        {/* Pestañas de resolución */}
+        <div style={{ marginBottom: '14px' }}>
+          <span className="field-label" style={{ marginBottom: '8px', display: 'block', fontWeight: 600, textAlign: 'center' }}>
+            ¿Qué solución prefieres aplicar?
           </span>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
             <button
               type="button"
               className={selectedAction === 'move' ? 'btn-submit-pro btn-small' : 'btn-sec-pro btn-small'}
+              style={{ justifyContent: 'center', padding: '8px' }}
               onClick={() => setSelectedAction('move')}
               disabled={isSubmitting}
             >
-              1. Mover a otro día
+              1. Mover a otra fecha
             </button>
             <button
               type="button"
               className={selectedAction === 'reduce' ? 'btn-submit-pro btn-small' : 'btn-sec-pro btn-small'}
+              style={{ justifyContent: 'center', padding: '8px' }}
               onClick={() => setSelectedAction('reduce')}
               disabled={isSubmitting}
             >
@@ -284,32 +288,25 @@ export default function OverloadConflictModal({
           </div>
 
           {selectedAction === 'move' && (
-            <div
-              style={{
-                background: '#f8fafc',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-              }}
-            >
+            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
               {taskExceedsLimitEntirely ? (
                 <div style={{ color: '#b45309', fontSize: '12px', lineHeight: 1.4 }}>
-                  <strong>Aviso:</strong> Esta gestión sola dura <strong>{attemptedHours}h</strong>, lo cual supera tu límite diario completo de <strong>{limitHours}h</strong>. Pasa a la pestaña "2. Reducir horas" para continuar.
+                  Esta gestión necesita <strong>{attemptedHours}h</strong>, superando el límite diario de <strong>{limitHours}h</strong>. Pasa a <em>"2. Reducir horas"</em> para ajustarla.
                 </div>
               ) : (
                 <>
-                  <label className="field-label" style={{ fontSize: '12px' }}>
-                    Días sugeridos donde caben tus <strong>{attemptedHours}h</strong> sin sobrecargar:
+                  <label className="field-label" style={{ fontSize: '12px', marginBottom: '6px', display: 'block' }}>
+                    Días sugeridos con espacio para tus <strong>{attemptedHours}h</strong>:
                   </label>
 
                   {conflictData.suggested_dates && conflictData.suggested_dates.length > 0 ? (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '8px 0 12px 0' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
                       {conflictData.suggested_dates.map((d) => (
                         <button
                           key={d}
                           type="button"
                           className={targetDate === d ? 'btn-submit-pro btn-small' : 'btn-sec-pro btn-small'}
-                          style={{ fontSize: '12px', padding: '4px 10px' }}
+                          style={{ fontSize: '12px', padding: '5px 10px' }}
                           onClick={() => setTargetDate(d)}
                           disabled={isSubmitting}
                         >
@@ -319,14 +316,14 @@ export default function OverloadConflictModal({
                       ))}
                     </div>
                   ) : (
-                    <p className="field-hint" style={{ margin: '6px 0 10px 0' }}>
-                      No hay días sugeridos automáticos. Elige otra fecha en el calendario:
+                    <p className="field-hint" style={{ margin: '4px 0 8px 0' }}>
+                      No encontramos días inmediatos con espacio. Selecciona una fecha:
                     </p>
                   )}
 
                   <div className="field-group" style={{ marginBottom: 0 }}>
                     <label htmlFor="conflict-target-date" className="field-label" style={{ fontSize: '12px' }}>
-                      O elige otra fecha en el calendario:
+                      O selecciona otra fecha manual:
                     </label>
                     <DateField
                       id="conflict-target-date"
@@ -344,14 +341,7 @@ export default function OverloadConflictModal({
           )}
 
           {selectedAction === 'reduce' && (
-            <div
-              style={{
-                background: '#f8fafc',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-              }}
-            >
+            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
               <div className="field-group" style={{ marginBottom: 0 }}>
                 <label htmlFor="reduced-hours-input" className="field-label" style={{ fontSize: '12px' }}>
                   Ajustar horas estimadas para este día:
@@ -366,21 +356,16 @@ export default function OverloadConflictModal({
                     value={reducedHours}
                     onChange={(e) => setReducedHours(e.target.value)}
                     className="field-input"
-                    style={{ maxWidth: '120px' }}
+                    style={{ maxWidth: '110px' }}
                     disabled={isSubmitting}
                   />
-                  <span style={{ fontSize: '13px', color: '#64748b' }}>
-                    horas estimadas
-                  </span>
+                  <span style={{ fontSize: '13px', color: '#64748b' }}>horas de trabajo</span>
                 </div>
                 <small className="field-hint" style={{ marginTop: '6px', display: 'block' }}>
                   {maxAllowedSameDay > 0 ? (
-                    <>
-                      Sugerencia: con <strong>{maxAllowedSameDay}h</strong> la carga del día queda en{' '}
-                      <strong>{limitHours}h</strong> exactas (sin sobrecarga).
-                    </>
+                    <>Recomendación: con <strong>{maxAllowedSameDay}h</strong> la jornada queda en el límite exacto ({limitHours}h).</>
                   ) : (
-                    <>Este día ya alcanzó o superó el límite con otras tareas.</>
+                    <>Este día ya está al tope con otras actividades.</>
                   )}
                 </small>
               </div>
@@ -388,78 +373,187 @@ export default function OverloadConflictModal({
           )}
         </div>
 
+        {/* Barra de viabilidad */}
         <div
           style={{
-            padding: '10px 12px',
-            borderRadius: '6px',
-            fontSize: '12px',
+            padding: '10px 14px',
+            borderRadius: '10px',
+            fontSize: '12.5px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: '10px',
             background: liveCalculation.isOverloaded ? '#fef2f2' : '#f0fdf4',
             border: `1px solid ${liveCalculation.isOverloaded ? '#fecaca' : '#bbf7d0'}`,
             color: liveCalculation.isOverloaded ? '#991b1b' : '#166534',
-            marginBottom: '16px',
+            marginBottom: '18px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
             {liveCalculation.isOverloaded ? (
-              <IconAlertTriangle size={16} />
+              <IconAlertTriangle size={16} style={{ flexShrink: 0 }} />
             ) : (
-              <IconCheckCircle size={16} />
+              <IconCheckCircle size={16} style={{ flexShrink: 0 }} />
             )}
-            <span>{liveCalculation.message}</span>
+            <span style={{ lineHeight: 1.3 }}>{liveCalculation.message}</span>
           </div>
-          <strong>{liveCalculation.isOverloaded ? 'Conflicto persistente' : 'Solución viable'}</strong>
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: '11.5px',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              backgroundColor: liveCalculation.isOverloaded ? '#fee2e2' : '#dcfce7',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {liveCalculation.isOverloaded ? 'Conflicto activo' : 'Solución viable'}
+          </span>
         </div>
 
-        <div
-          className="confirm-dialog-actions"
-          style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}
-        >
-          <div style={{ display: 'flex', gap: '8px' }}>
+        {/* BLOQUE DE ACCIONES ALINEADO */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', width: '100%' }}>
+          
+          {/* Fila 1: Opciones secundarias (50% cada una, alineadas con los bordes de abajo) */}
+          <div style={{ display: 'flex', gap: '9px', width: '100%' }}>
             <button
               type="button"
-              className="btn-sec-pro btn-small"
+              style={{
+                flex: 1,
+                padding: '9px 12px',
+                fontSize: '13.5px',
+                fontWeight: 500,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                color: '#334155',
+                borderRadius: '8px',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background-color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#f8fafc'
+              }}
+              onMouseLeave={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#ffffff'
+              }}
               onClick={handlePostpone}
               disabled={isSubmitting}
             >
-              Posponer gestión
+              Posponer
             </button>
+
             <button
               type="button"
-              className="btn-danger-ghost btn-small"
+              style={{
+                flex: 1,
+                padding: '9px 12px',
+                fontSize: '13.5px',
+                fontWeight: 500,
+                background: '#ffffff',
+                border: '1px solid #fca5a5',
+                color: '#b91c1c',
+                borderRadius: '8px',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background-color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#fef2f2'
+              }}
+              onMouseLeave={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#ffffff'
+              }}
               onClick={handleForceSave}
               disabled={isSubmitting}
+              title="Guarda la tarea ignorando el límite diario de horas"
             >
-              Ignorar y forzar
+              Forzar sobrecarga
             </button>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn-cancel-pro"
-              onClick={onCancel}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="btn-submit-pro"
-              disabled={liveCalculation.isOverloaded || isSubmitting}
-              onClick={() => {
-                if (selectedAction === 'move') {
-                  handleResolveByMove(targetDate)
-                } else {
-                  handleResolveByReduce()
-                }
-              }}
-            >
-              {isSubmitting ? 'Guardando...' : 'Confirmar solución'}
-            </button>
-          </div>
+          {/* Fila 2: Aplicar solución (Acción primaria a ancho completo) */}
+          <button
+            type="button"
+            disabled={liveCalculation.isOverloaded || isSubmitting}
+            onClick={() => {
+              if (selectedAction === 'move') {
+                handleResolveByMove(targetDate)
+              } else {
+                handleResolveByReduce()
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '11px',
+              fontSize: '14.5px',
+              fontWeight: 600,
+              borderRadius: '8px',
+              border: 'none',
+              background: liveCalculation.isOverloaded || isSubmitting ? '#93c5fd' : '#2563eb',
+              color: '#ffffff',
+              cursor: liveCalculation.isOverloaded || isSubmitting ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: liveCalculation.isOverloaded ? 'none' : '0 1px 3px rgba(37, 99, 235, 0.25)',
+              transition: 'background-color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              if (!liveCalculation.isOverloaded && !isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#1d4ed8'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!liveCalculation.isOverloaded && !isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#2563eb'
+              }
+            }}
+          >
+            {isSubmitting ? 'Guardando...' : 'Aplicar solución'}
+          </button>
+
+          {/* Fila 3: Cancelar (Acción de escape a ancho completo, visualmente neutra) */}
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isSubmitting}
+            style={{
+              width: '100%',
+              padding: '9px',
+              fontSize: '14px',
+              fontWeight: 500,
+              color: '#64748b',
+              background: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '8px',
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              if (!isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#f8fafc'
+                e.currentTarget.style.color = '#334155'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#ffffff'
+                e.currentTarget.style.color = '#64748b'
+              }
+            }}
+          >
+            Cancelar
+          </button>
         </div>
+
       </div>
     </div>
   )
