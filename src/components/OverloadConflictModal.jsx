@@ -411,17 +411,17 @@ export default function OverloadConflictModal({
           </span>
         </div>
 
-        {/* DISTRIBUCIÓN EXACTA DE BOTONES COMO EN LA IMAGEN */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+        {/* BLOQUE DE ACCIONES ALINEADO */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', width: '100%' }}>
           
-          {/* Fila 1: Posponer y Forzar sobrecarga (botones compactos centrados) */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', width: '100%' }}>
+          {/* Fila 1: Opciones secundarias (50% cada una, alineadas con los bordes de abajo) */}
+          <div style={{ display: 'flex', gap: '9px', width: '100%' }}>
             <button
               type="button"
               style={{
-                minWidth: '120px',
-                padding: '7px 18px',
-                fontSize: '13px',
+                flex: 1,
+                padding: '9px 12px',
+                fontSize: '13.5px',
                 fontWeight: 500,
                 background: '#ffffff',
                 border: '1px solid #cbd5e1',
@@ -431,6 +431,13 @@ export default function OverloadConflictModal({
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                transition: 'background-color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#f8fafc'
+              }}
+              onMouseLeave={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#ffffff'
               }}
               onClick={handlePostpone}
               disabled={isSubmitting}
@@ -441,9 +448,9 @@ export default function OverloadConflictModal({
             <button
               type="button"
               style={{
-                minWidth: '140px',
-                padding: '7px 18px',
-                fontSize: '13px',
+                flex: 1,
+                padding: '9px 12px',
+                fontSize: '13.5px',
                 fontWeight: 500,
                 background: '#ffffff',
                 border: '1px solid #fca5a5',
@@ -453,6 +460,13 @@ export default function OverloadConflictModal({
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                transition: 'background-color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#fef2f2'
+              }}
+              onMouseLeave={(e) => {
+                if (!isSubmitting) e.currentTarget.style.backgroundColor = '#ffffff'
               }}
               onClick={handleForceSave}
               disabled={isSubmitting}
@@ -462,7 +476,7 @@ export default function OverloadConflictModal({
             </button>
           </div>
 
-          {/* Fila 2: Aplicar solución (Ancho 100%, azul vibrante) */}
+          {/* Fila 2: Aplicar solución (Acción primaria a ancho completo) */}
           <button
             type="button"
             disabled={liveCalculation.isOverloaded || isSubmitting}
@@ -486,12 +500,24 @@ export default function OverloadConflictModal({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              boxShadow: liveCalculation.isOverloaded ? 'none' : '0 1px 3px rgba(37, 99, 235, 0.25)',
+              transition: 'background-color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              if (!liveCalculation.isOverloaded && !isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#1d4ed8'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!liveCalculation.isOverloaded && !isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#2563eb'
+              }
             }}
           >
             {isSubmitting ? 'Guardando...' : 'Aplicar solución'}
           </button>
 
-          {/* Fila 3: Cancelar (Ancho 100%, botón con borde como en la captura) */}
+          {/* Fila 3: Cancelar (Acción de escape a ancho completo, visualmente neutra) */}
           <button
             type="button"
             onClick={onCancel}
@@ -501,7 +527,7 @@ export default function OverloadConflictModal({
               padding: '9px',
               fontSize: '14px',
               fontWeight: 500,
-              color: '#334155',
+              color: '#64748b',
               background: '#ffffff',
               border: '1px solid #cbd5e1',
               borderRadius: '8px',
@@ -509,6 +535,19 @@ export default function OverloadConflictModal({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              transition: 'background-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              if (!isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#f8fafc'
+                e.currentTarget.style.color = '#334155'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isSubmitting) {
+                e.currentTarget.style.backgroundColor = '#ffffff'
+                e.currentTarget.style.color = '#64748b'
+              }
             }}
           >
             Cancelar
