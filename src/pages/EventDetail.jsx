@@ -1065,19 +1065,44 @@ export default function EventDetail() {
               if (editEntry) {
                 return (
                   <div key={task.id} className="event-card-item">
-                    <div className="event-card-top">
+                    {/* Cabecera: Insignia "Editando gestión" a la izquierda y fecha objetivo a la derecha */}
+                    <div
+                      className="event-card-top"
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}
+                    >
                       <span className="event-status-badge">Editando gestión</span>
+                      {editEntry.form.scheduled_date && (
+                        <span
+                          className="event-date"
+                          style={{ fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <IconCalendar size={14} />
+                          <span>{formatDateFromISO(editEntry.form.scheduled_date)}</span>
+                        </span>
+                      )}
                     </div>
+
+                    {/* Alerta de error si falla la validación al guardar */}
+                    {editEntry.feedback?.type === 'error' && (
+                      <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '14px' }}>
+                        <IconAlertTriangle size={16} className="icon-rose" />
+                        <span style={{ fontSize: '12.5px' }}>{editEntry.feedback.message}</span>
+                      </div>
+                    )}
 
                     <form
                       className="event-edit-form"
                       onSubmit={(e) => handleSubmitSubtaskEdit(task.id, e)}
                       noValidate
                     >
+                      {/* 1. Nombre de la gestión con contador */}
                       <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-name`} className="field-label">
-                          Nombre <span className="req-star">*</span>
-                        </label>
+                        <div className="field-label-row">
+                          <label htmlFor={`edit-${task.id}-name`} className="field-label">
+                            Nombre de la gestión <span className="req-star">*</span>
+                          </label>
+                          <span className="char-counter">{editEntry.form.name.length}/200</span>
+                        </div>
                         <input
                           id={`edit-${task.id}-name`}
                           type="text"
@@ -1085,11 +1110,43 @@ export default function EventDetail() {
                           value={editEntry.form.name}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className="field-input"
+                          className={`field-input ${editEntry.touched.name && editEntry.errors.name ? 'field-input-error' : ''}`}
+                          placeholder="Ej: Confirmar asistentes"
                           required
+                          maxLength={200}
+                          aria-invalid={editEntry.touched.name && !!editEntry.errors.name}
                         />
+                        {editEntry.touched.name && editEntry.errors.name && (
+                          <span className="field-error-text">{editEntry.errors.name}</span>
+                        )}
                       </div>
 
+                      {/* 2. Tipo de gestión */}
+                      <div className="field-group">
+                        <label htmlFor={`edit-${task.id}-type`} className="field-label">
+                          Tipo de gestión <span className="req-star">*</span>
+                        </label>
+                        <select
+                          id={`edit-${task.id}-type`}
+                          name="type"
+                          value={editEntry.form.type}
+                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
+                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
+                          className={`field-input field-select ${editEntry.touched.type && editEntry.errors.type ? 'field-input-error' : ''}`}
+                          required
+                          aria-invalid={editEntry.touched.type && !!editEntry.errors.type}
+                        >
+                          <option value="" disabled>Selecciona un tipo</option>
+                          {TASK_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                        {editEntry.touched.type && editEntry.errors.type && (
+                          <span className="field-error-text">{editEntry.errors.type}</span>
+                        )}
+                      </div>
+
+                      {/* 3. Fecha objetivo */}
                       <div className="field-group">
                         <label htmlFor={`edit-${task.id}-date`} className="field-label">
                           Fecha objetivo <span className="req-star">*</span>
@@ -1102,13 +1159,62 @@ export default function EventDetail() {
                           max={event.event_date}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className="field-input"
+                          className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
                           required
+                          aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
                         />
+                        {editEntry.touched.scheduled_date && editEntry.errors.scheduled_date && (
+                          <span className="field-error-text">{editEntry.errors.scheduled_date}</span>
+                        )}
                       </div>
 
+                      {/* 4. Horas estimadas */}
                       <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-status`} className="field-label">Estado</label>
+                        <label htmlFor={`edit-${task.id}-hours`} className="field-label">
+                          Horas estimadas <span className="req-star">*</span>
+                        </label>
+                        <input
+                          id={`edit-${task.id}-hours`}
+                          type="number"
+                          name="estimated_hours"
+                          value={editEntry.form.estimated_hours}
+                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
+                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
+                          placeholder="Ej: 1.0"
+                          min="0.1"
+                          step="0.1"
+                          className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
+                          required
+                          aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
+                        />
+                        {editEntry.touched.estimated_hours && editEntry.errors.estimated_hours && (
+                          <span className="field-error-text">{editEntry.errors.estimated_hours}</span>
+                        )}
+                      </div>
+
+                      {/* 5. Prioridad */}
+                      <div className="field-group">
+                        <label htmlFor={`edit-${task.id}-priority`} className="field-label">
+                          Prioridad
+                        </label>
+                        <select
+                          id={`edit-${task.id}-priority`}
+                          name="priority"
+                          value={editEntry.form.priority}
+                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
+                          className="field-input field-select"
+                        >
+                          {TASK_PRIORITIES.map((p) => (
+                            <option key={p.value} value={p.value}>{p.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 6. Estado */}
+                      <div className="field-group">
+                        <label htmlFor={`edit-${task.id}-status`} className="field-label">
+                          Estado
+                        </label>
                         <select
                           id={`edit-${task.id}-status`}
                           name="status"
@@ -1122,22 +1228,27 @@ export default function EventDetail() {
                         </select>
                       </div>
 
+                      {/* 7. Nota */}
                       <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-note`} className="field-label">Nota</label>
+                        <label htmlFor={`edit-${task.id}-note`} className="field-label">
+                          Nota
+                        </label>
                         <textarea
                           id={`edit-${task.id}-note`}
                           name="note"
                           value={editEntry.form.note}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          rows="2"
+                          placeholder="Indicaciones adicionales para esta gestión..."
+                          rows="3"
                           className="field-input field-textarea"
                         />
                       </div>
 
-                      <div className="form-actions-row">
+                      {/* 8. Botones de acción */}
+                      <div className="form-actions-row" style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                         <button
                           type="button"
-                          className="btn-cancel-pro"
+                          className="btn-sec-pro"
                           onClick={() => handleCancelEditSubtask(task.id)}
                           disabled={editEntry.isSubmitting}
                         >
@@ -1148,13 +1259,14 @@ export default function EventDetail() {
                           className="btn-submit-pro"
                           disabled={editEntry.isSubmitting}
                         >
-                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar'}
+                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar cambios'}
                         </button>
                       </div>
                     </form>
                   </div>
                 )
               }
+
 
               const afterEvent = isAfterEventDate(task, event.event_date)
               const isTaskDone = task.status === 'done'
