@@ -1907,12 +1907,198 @@ textarea {
   background-color: var(--rose-50);
 }
 
-.auth-checking {
+/* Pantalla "Verificando tu sesión" (US-11) */
+.session-check {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: 1.5rem;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--brand-50) 0%, var(--slate-50) 55%, #eef2ff 100%);
+}
+
+.session-check-blob {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.55;
+  animation: session-float 14s ease-in-out infinite alternate;
+}
+
+.session-check-blob-a {
+  top: -140px;
+  left: -120px;
+  background: var(--brand-200);
+}
+
+.session-check-blob-b {
+  bottom: -160px;
+  right: -120px;
+  background: #c7d2fe;
+  animation-delay: -7s;
+}
+
+.session-check-card {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2.5rem 2rem 2rem;
+  background-color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(30, 58, 138, 0.12);
+  animation: session-card-in 0.5s ease-out both;
+}
+
+.session-check-logo {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+
+/* Anillo con degradado que gira alrededor del logo */
+.session-check-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--brand-500) 280deg, transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  animation: loading-spin 1.4s linear infinite;
+}
+
+.session-check-pulse {
+  position: absolute;
+  inset: 14px;
+  border-radius: 20px;
+  background-color: var(--brand-400);
+  animation: session-pulse 2s ease-out infinite;
+}
+
+.session-check-logo-box {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
+}
+
+.session-check-brand {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-700);
+}
+
+.session-check-title {
+  margin: 0.35rem 0 1.25rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--slate-900);
+}
+
+.session-check-dots span {
+  display: inline-block;
+  animation: session-dot 1.4s ease-in-out infinite;
+}
+
+.session-check-dots span:nth-child(2) { animation-delay: 0.2s; }
+.session-check-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Barra indeterminada: un tramo de color recorre la pista */
+.session-check-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--brand-100);
+  overflow: hidden;
+}
+
+.session-check-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-400), var(--brand-600));
+  animation: session-bar 1.6s ease-in-out infinite;
+}
+
+.session-check-hint {
+  margin: 1rem 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--slate-600);
+  animation: loading-fade-in 0.4s ease-out both;
+}
+
+@keyframes session-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes session-pulse {
+  0% { opacity: 0.45; transform: scale(0.9); }
+  100% { opacity: 0; transform: scale(1.45); }
+}
+
+@keyframes session-dot {
+  0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+
+@keyframes session-bar {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+@keyframes session-float {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(60px, 40px) scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-check-blob,
+  .session-check-card,
+  .session-check-ring,
+  .session-check-pulse,
+  .session-check-dots span,
+  .session-check-hint {
+    animation: none;
+  }
+
+  .session-check-pulse {
+    opacity: 0;
+  }
+
+  /* Sin movimiento la barra queda como pista llena y estática */
+  .session-check-bar-fill {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.6;
+  }
 }
 
 @media (max-width: 520px) {

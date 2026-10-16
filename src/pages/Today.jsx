@@ -17,7 +17,7 @@ import DateWarning from '../components/DateWarning'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
-import { apiFetch } from '../api/client'
+import { apiFetch, CONNECTION_ERROR_MESSAGE } from '../api/client'
 import {
   daysBetween,
   formatDateFromISO,
@@ -621,7 +621,19 @@ export default function Today() {
   const showUndoToast = (subtask, previousState, message) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setToast(null), 6000)
-    setToast({ message, subtask, previousState })
+    setToast({ type: 'success', message, subtask, previousState })
+  }
+
+  // Errores de las acciones rápidas: en la página, nunca en un alert() del navegador
+  const showErrorToast = (action, err) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 8000)
+    setToast({ type: 'error', message: `${action}. ${err.message || CONNECTION_ERROR_MESSAGE}` })
+  }
+
+  const closeToast = () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(null)
   }
 
   const handleUndo = async () => {
@@ -642,7 +654,7 @@ export default function Today() {
       })
       loadToday()
     } catch (err) {
-      alert(err.message || 'No se pudo deshacer la acción.')
+      showErrorToast('No pudimos deshacer el cambio', err)
     }
   }
 
@@ -828,7 +840,7 @@ export default function Today() {
           eventDate: eventDateById.get(task.event_id),
         })
       } else {
-        alert(err.message || 'No pudimos reprogramar la gestión.')
+        showErrorToast(`No pudimos reprogramar "${task.name}"`, err)
       }
     }
   }
@@ -848,7 +860,7 @@ export default function Today() {
       loadToday()
       showUndoToast(task, previousSnapshot, `¡Gestión "${task.name}" completada!`)
     } catch (err) {
-      alert(err.message || 'No se pudo marcar la gestión como completada.')
+      showErrorToast(`No pudimos marcar "${task.name}" como hecha`, err)
     }
   }
 
@@ -859,17 +871,14 @@ export default function Today() {
       note: task.note,
     }
 
-    try {
-      await apiFetch(`/api/subtasks/${task.id}/`, {
-        method: 'PATCH',
-        body: { status: 'postponed', note },
-      })
-      setPostponeState(null)
-      loadToday()
-      showUndoToast(task, previousSnapshot, `Gestión "${task.name}" pospuesta.`)
-    } catch (err) {
-      alert(err.message || 'No se pudo posponer la gestión.')
-    }
+    // Si falla, el error sube al modal de posponer, que lo muestra junto al formulario
+    await apiFetch(`/api/subtasks/${task.id}/`, {
+      method: 'PATCH',
+      body: { status: 'postponed', note },
+    })
+    setPostponeState(null)
+    loadToday()
+    showUndoToast(task, previousSnapshot, `Gestión "${task.name}" pospuesta.`)
   }
 
   const renderGroups = () => (
@@ -1000,6 +1009,13 @@ export default function Today() {
         </p>
       )}
 
+      {statusFilter !== 'postponed' && (
+        <p className="field-hint">
+          Las gestiones pospuestas no aparecen aquí ni suman horas a tu día. Para verlas, filtra
+          por Estado: Pospuesto.
+        </p>
+      )}
+
       <div className="today-layout">
         <div className="today-main-column" aria-busy={isLoading} style={{ width: '100%' }}>
           {content}
@@ -1011,49 +1027,67 @@ export default function Today() {
 
       {toast && (
         <div
-          className="banner-alert banner-success"
-          role="status"
+          className={`banner-alert ${toast.type === 'error' ? 'banner-error' : 'banner-success'}`}
+          role={toast.type === 'error' ? 'alert' : 'status'}
           style={{
             position: 'fixed',
             bottom: '24px',
             right: '24px',
             zIndex: 9999,
+            maxWidth: 'min(440px, calc(100vw - 48px))',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}
         >
-          <IconCheckCircle size={18} className="icon-emerald" />
+          {toast.type === 'error' ? (
+            <IconAlertTriangle size={18} className="icon-rose" />
+          ) : (
+            <IconCheckCircle size={18} className="icon-emerald" />
+          )}
           <span>{toast.message}</span>
-          <button
-            type="button"
-            className="btn-sec-pro btn-small"
-            onClick={handleUndo}
-            style={{ marginLeft: '8px' }}
-          >
-            Deshacer
-          </button>
+          {toast.type === 'error' ? (
+            <button
+              type="button"
+              className="btn-sec-pro btn-small"
+              onClick={closeToast}
+              aria-label="Cerrar mensaje"
+              style={{ marginLeft: '8px' }}
+            >
+              <IconX size={14} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn-sec-pro btn-small"
+              onClick={handleUndo}
+              style={{ marginLeft: '8px' }}
+            >
+              Deshacer
+            </button>
+          )}
         </div>
       )}
 
-      <OverloadConflictModal
-        isOpen={Boolean(conflictState)}
-        conflictData={conflictState?.conflictData}
-        subtask={conflictState?.subtask}
-        eventDate={conflictState?.eventDate}
-        onResolved={(updatedTask, message) => {
-          const prev = conflictState?.subtask
-          setConflictState(null)
-          if (prev?.id) {
-            handleCancelEditSubtask(prev.id)
-          }
-          loadToday()
-          showUndoToast(
-            updatedTask,
-            { scheduled_date: prev?.scheduled_date, status: prev?.status, note: prev?.note },
-            message
-          )
-        }}
-        onCancel={() => setConflictState(null)}
-      />
+      {conflictState && (
+        <OverloadConflictModal
+          conflictData={conflictState?.conflictData}
+          subtask={conflictState?.subtask}
+          eventDate={conflictState?.eventDate}
+          onResolved={(updatedTask, message) => {
+            const prev = conflictState?.subtask
+            setConflictState(null)
+            if (prev?.id) {
+              handleCancelEditSubtask(prev.id)
+            }
+            loadToday()
+            showUndoToast(
+              updatedTask,
+              { scheduled_date: prev?.scheduled_date, status: prev?.status, note: prev?.note },
+              message
+            )
+          }}
+          onCancel={() => setConflictState(null)}
+        />
+      )}
 
       <PostponeModal
         isOpen={Boolean(postponeState)}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
@@ -84,6 +84,10 @@ function buildSubtaskFormValues(task) {
   }
 }
 
+function subtasksProgressKey(subtasks) {
+  return (Array.isArray(subtasks) ? subtasks : []).map((t) => `${t.id}:${t.status}`).join(',')
+}
+
 export default function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -113,10 +117,15 @@ export default function EventDetail() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Combinación de gestiones/estados para la que el progreso mostrado es válido
+  const progressKeyRef = useRef(null)
+  const [fetchedProgress, setFetchedProgress] = useState({ eventId: null, data: null })
+
   useEffect(() => {
     const controller = new AbortController()
     apiFetch(`/api/events/${id}/`, { signal: controller.signal })
       .then((data) => {
+        progressKeyRef.current = subtasksProgressKey(data.subtasks)
         setEvent(data)
         setLoadResult({ key: loadKey, error: null })
       })
@@ -136,13 +145,28 @@ export default function EventDetail() {
 
   const subtasks = Array.isArray(event?.subtasks) ? event.subtasks : []
 
-  // Cálculo reactivo consistente de la barra de progreso (US-10, PI-147)
-  const progressData = useMemo(() => {
-    const total = subtasks.length
-    const executed = subtasks.filter((t) => t.status === 'done').length
-    const percentage = total > 0 ? Math.round((executed / total) * 100) : 0
-    return { total, executed, percentage }
-  }, [subtasks])
+  // Progreso calculado por el backend (US-10, PI-149): el mismo número que en /progreso.
+  // Llega con el evento y se vuelve a pedir cuando cambian las gestiones o sus estados.
+  const progressKey = subtasksProgressKey(subtasks)
+  const hasEvent = Boolean(event)
+
+  useEffect(() => {
+    if (!hasEvent || progressKey === progressKeyRef.current) return
+    const controller = new AbortController()
+    apiFetch('/api/progress/', { params: { event: id }, signal: controller.signal })
+      .then((data) => {
+        progressKeyRef.current = progressKey
+        setFetchedProgress({ eventId: id, data })
+      })
+      .catch(() => {
+        // Si falla, la barra conserva el último valor y se reintenta con el próximo cambio
+      })
+    return () => controller.abort()
+  }, [id, hasEvent, progressKey])
+
+  const progressData =
+    (fetchedProgress.eventId === id && fetchedProgress.data) ||
+    event?.progress || { total: 0, executed: 0, percentage: 0 }
 
   const newSubtaskDateRange = { eventDate: event?.event_date }
   const editDateRange = (subtaskId) => ({
@@ -1436,33 +1460,34 @@ export default function EventDetail() {
         onCancel={handleCancelDelete}
       />
 
-      <OverloadConflictModal
-        isOpen={Boolean(conflictState)}
-        conflictData={conflictState?.conflictData}
-        subtask={conflictState?.subtask}
-        eventDate={conflictState?.eventDate}
-        isNew={Boolean(conflictState?.isNew)}
-        onResolved={(resultTask, message) => {
-          const wasNew = conflictState?.isNew
-          setConflictState(null)
-          if (wasNew) {
-            setEvent((prev) => ({
-              ...prev,
-              subtasks: [...(Array.isArray(prev.subtasks) ? prev.subtasks : []), resultTask],
-            }))
-            setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
-            setShowSubtaskForm(false)
-          } else {
-            setEvent((prev) => ({
-              ...prev,
-              subtasks: prev.subtasks.map((s) => (s.id === resultTask.id ? resultTask : s)),
-            }))
-            handleCancelEditSubtask(resultTask.id)
-          }
-          setFeedback({ type: 'success', message, details: resultTask })
-        }}
-        onCancel={() => setConflictState(null)}
-      />
+      {conflictState && (
+        <OverloadConflictModal
+          conflictData={conflictState?.conflictData}
+          subtask={conflictState?.subtask}
+          eventDate={conflictState?.eventDate}
+          isNew={Boolean(conflictState?.isNew)}
+          onResolved={(resultTask, message) => {
+            const wasNew = conflictState?.isNew
+            setConflictState(null)
+            if (wasNew) {
+              setEvent((prev) => ({
+                ...prev,
+                subtasks: [...(Array.isArray(prev.subtasks) ? prev.subtasks : []), resultTask],
+              }))
+              setSubtaskForm(INITIAL_SUBTASK_FORM_STATE)
+              setShowSubtaskForm(false)
+            } else {
+              setEvent((prev) => ({
+                ...prev,
+                subtasks: prev.subtasks.map((s) => (s.id === resultTask.id ? resultTask : s)),
+              }))
+              handleCancelEditSubtask(resultTask.id)
+            }
+            setFeedback({ type: 'success', message, details: resultTask })
+          }}
+          onCancel={() => setConflictState(null)}
+        />
+      )}
 
       <PostponeModal
         isOpen={Boolean(postponeState)}
