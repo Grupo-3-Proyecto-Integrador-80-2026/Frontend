@@ -544,11 +544,21 @@ function TodayGroup({
   )
 }
 
-function TodaySummary({ data, events, windowDays }) {
+// Cuántos días faltan para un evento, en palabras cortas
+function describeDaysUntil(today, eventDate) {
+  const days = daysBetween(today, eventDate)
+  if (days === 0) return 'Hoy'
+  if (days === 1) return 'Mañana'
+  return `En ${days} días`
+}
+
+function TodaySummary({ data, events, dailyLimit }) {
   const pendingHours = [...(data.overdue || []), ...(data.due_today || [])].reduce(
     (sum, task) => sum + Number(task.estimated_hours),
     0,
   )
+  const overLimit = pendingHours > dailyLimit
+  const loadPercent = dailyLimit > 0 ? Math.min(100, (pendingHours / dailyLimit) * 100) : 0
 
   const nextEvents = events
     .filter((ev) => ev.event_date >= data.today)
@@ -557,44 +567,64 @@ function TodaySummary({ data, events, windowDays }) {
 
   return (
     <aside className="today-aside" aria-label="Resumen">
-      <section className="card-pro">
+      <section className="card-pro today-summary-card">
         <div className="card-pro-header">
           <h3>Resumen</h3>
         </div>
-        <div className="today-summary-stats">
-          {GROUPS.map((group) => (
-            <div key={group.key} className="info-row">
-              <span className="info-key">
-                {group.key === 'upcoming' ? `${group.title} (${windowDays} días)` : group.title}
+
+        {/* Un indicador por columna, con el mismo color e ícono que su grupo */}
+        <ul className="today-stats plain-list">
+          {[...GROUPS, POSTPONED_GROUP].map((group) => (
+            <li key={group.key} className={`today-stat today-stat-${group.key}`}>
+              <span className="today-stat-top">
+                <span className="today-stat-value">{data[group.key]?.length || 0}</span>
+                <group.Icon size={18} className="today-stat-icon" />
               </span>
-              <span className="info-val">{data[group.key]?.length || 0}</span>
-            </div>
+              <span className="today-stat-label">{group.title}</span>
+            </li>
           ))}
-          <div className="info-row">
-            <span className="info-key">{POSTPONED_GROUP.title}</span>
-            <span className="info-val">{data.postponed?.length || 0}</span>
+        </ul>
+
+        {/* Carga de vencidas + hoy frente al límite diario */}
+        <div className={`today-load ${overLimit ? 'today-load-over' : ''}`}>
+          <div className="today-load-text">
+            <span>Horas por atender</span>
+            <strong>
+              {hoursFormatter.format(pendingHours)} h
+              <span className="today-load-limit"> de {dailyLimit} h/día</span>
+            </strong>
           </div>
-          <div className="info-row">
-            <span className="info-key">Horas por atender</span>
-            <span className="info-val">{hoursFormatter.format(pendingHours)} h</span>
+          <div className="today-load-bar" aria-hidden="true">
+            <span style={{ width: `${loadPercent}%` }} />
           </div>
+          {overLimit && (
+            <p className="today-load-warning">
+              Superas tu límite diario: reprograma o pospone algunas gestiones.
+            </p>
+          )}
         </div>
       </section>
 
-      <section className="card-pro">
+      <section className="card-pro today-events-card">
         <div className="card-pro-header">
           <h3>Próximos eventos</h3>
         </div>
         {nextEvents.length === 0 ? (
           <p className="endpoint-hint">No hay eventos próximos.</p>
         ) : (
-          <ul className="plain-list">
+          <ul className="today-next-events plain-list">
             {nextEvents.map((ev) => (
-              <li key={ev.id} className="info-row">
-                <Link to={`/evento/${ev.id}`} className="today-card-event truncate">
-                  {ev.name}
-                </Link>
-                <span className="info-val">{formatDateFromISO(ev.event_date)}</span>
+              <li key={ev.id} className="today-next-event">
+                <span className="today-next-event-date" aria-hidden="true">
+                  <IconCalendar size={16} />
+                </span>
+                <span className="today-next-event-info">
+                  <Link to={`/evento/${ev.id}`} className="today-card-event truncate">
+                    {ev.name}
+                  </Link>
+                  <span className="today-next-event-meta">{formatDateFromISO(ev.event_date)}</span>
+                </span>
+                <span className="today-next-event-days">{describeDaysUntil(data.today, ev.event_date)}</span>
               </li>
             ))}
           </ul>
@@ -1062,7 +1092,7 @@ export default function Today() {
 
       <div className="today-layout">
         {data?.today && !error && (
-          <TodaySummary data={data} events={events} windowDays={windowDays} />
+          <TodaySummary data={data} events={events} dailyLimit={userDailyLimit} />
         )}
         <div className="today-main-column" aria-busy={isLoading} style={{ width: '100%' }}>
           {content}
