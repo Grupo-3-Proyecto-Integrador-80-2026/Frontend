@@ -561,21 +561,23 @@ function TodaySummary({ data, events, windowDays }) {
         <div className="card-pro-header">
           <h3>Resumen</h3>
         </div>
-        {GROUPS.map((group) => (
-          <div key={group.key} className="info-row">
-            <span className="info-key">
-              {group.key === 'upcoming' ? `${group.title} (${windowDays} días)` : group.title}
-            </span>
-            <span className="info-val">{data[group.key]?.length || 0}</span>
+        <div className="today-summary-stats">
+          {GROUPS.map((group) => (
+            <div key={group.key} className="info-row">
+              <span className="info-key">
+                {group.key === 'upcoming' ? `${group.title} (${windowDays} días)` : group.title}
+              </span>
+              <span className="info-val">{data[group.key]?.length || 0}</span>
+            </div>
+          ))}
+          <div className="info-row">
+            <span className="info-key">{POSTPONED_GROUP.title}</span>
+            <span className="info-val">{data.postponed?.length || 0}</span>
           </div>
-        ))}
-        <div className="info-row">
-          <span className="info-key">{POSTPONED_GROUP.title}</span>
-          <span className="info-val">{data.postponed?.length || 0}</span>
-        </div>
-        <div className="info-row">
-          <span className="info-key">Horas por atender</span>
-          <span className="info-val">{hoursFormatter.format(pendingHours)} h</span>
+          <div className="info-row">
+            <span className="info-key">Horas por atender</span>
+            <span className="info-val">{hoursFormatter.format(pendingHours)} h</span>
+          </div>
         </div>
       </section>
 
@@ -939,23 +941,19 @@ export default function Today() {
 
   const postponedItems = data?.postponed || []
 
+  // Pospuestas es la cuarta columna: siempre visible, así la cuadrícula no cambia de forma
   const renderGroups = () => (
-    <>
-      <div className="today-groups">
-        {GROUPS.map((group) => (
-          <TodayGroup key={group.key} group={group} items={data[group.key] || []} {...groupProps} />
-        ))}
-      </div>
-
-      {postponedItems.length > 0 && (
-        <TodayGroup
-          group={POSTPONED_GROUP}
-          items={postponedItems}
-          description="No cuentan como vencidas ni suman horas a tu día. Márcalas como hechas o edítalas para retomarlas."
-          {...groupProps}
-        />
-      )}
-    </>
+    <div className="today-groups">
+      {GROUPS.map((group) => (
+        <TodayGroup key={group.key} group={group} items={data[group.key] || []} {...groupProps} />
+      ))}
+      <TodayGroup
+        group={POSTPONED_GROUP}
+        items={postponedItems}
+        description="No suman horas a tu día. Edítalas para retomarlas."
+        {...groupProps}
+      />
+    </div>
   )
 
   let content
@@ -1063,12 +1061,12 @@ export default function Today() {
       )}
 
       <div className="today-layout">
-        <div className="today-main-column" aria-busy={isLoading} style={{ width: '100%' }}>
-          {content}
-        </div>
         {data?.today && !error && (
           <TodaySummary data={data} events={events} windowDays={windowDays} />
         )}
+        <div className="today-main-column" aria-busy={isLoading} style={{ width: '100%' }}>
+          {content}
+        </div>
       </div>
 
       {toast && (

@@ -1333,27 +1333,38 @@ textarea {
 }
 
 .today-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.today-aside {
-  position: sticky;
-  top: 1rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
 }
 
-@media (max-width: 991px) {
-  .today-layout {
+/* Resumen y Próximos eventos van arriba, uno junto al otro, sobre las columnas */
+.today-aside {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+/* Las cifras del resumen se reparten en columnas para no alargar la tarjeta */
+.today-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .today-aside {
     grid-template-columns: 1fr;
   }
-  .today-aside {
-    position: static;
-    order: -1;
+  .today-summary-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .today-summary-stats {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2299,19 +2310,6 @@ textarea {
   margin-bottom: 20px;
 }
 
-/* Cuadrícula fluida: la columna izquierda se estira y el resumen se ancla a la derecha.
-   Solo en pantallas anchas: con !important fuera del media query anulaba la
-   columna única de tablet/celular y el resumen quedaba debajo de los grupos. */
-@media (min-width: 1201px) {
-  .today-layout {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) 340px !important;
-    gap: 24px !important;
-    width: 100% !important;
-    align-items: start;
-  }
-}
-
 /* La tarjeta vacía ocupa armónicamente toda la columna izquierda */
 .today-layout > div[aria-busy] {
   width: 100%;
@@ -2329,33 +2327,24 @@ textarea {
 
 
 /* ==========================================================================
-   VISTA HOY: DISTRIBUCIÓN HORIZONTAL EN 3 COLUMNAS
+   VISTA HOY: 4 COLUMNAS (Vencidas, Para hoy, Próximas y Pospuestas)
    ========================================================================== */
 
-.today-layout {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 24px;
-  align-items: start;
-  width: 100%;
-}
-
-@media (max-width: 1200px) {
-  .today-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Contenedor de las 3 columnas */
 .today-groups {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
   width: 100%;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
+  .today-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
   .today-groups {
     grid-template-columns: 1fr;
   }
@@ -2385,10 +2374,8 @@ textarea {
   border-top: 4px solid #3b82f6;
 }
 
-/* Pospuestas (US-09): sección a lo ancho bajo las columnas de urgencia */
+/* Pospuestas (US-09): cuarta columna, separada de las de urgencia por su color neutro */
 .today-group-postponed {
-  margin-top: 16px;
-  min-height: 0;
   border-top: 4px solid #94a3b8;
 }
 
@@ -2397,12 +2384,6 @@ textarea {
 .today-group-postponed .today-group-count {
   background-color: var(--slate-600);
   color: #ffffff;
-}
-
-.today-group-postponed .today-card-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  align-items: start;
 }
 
 .today-group-desc {

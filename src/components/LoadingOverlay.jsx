@@ -21,11 +21,11 @@ export default function LoadingOverlay({ label, children }) {
   )
 }
 
-// Silueta de la vista "Hoy": tres grupos con tarjetas fantasma
+// Silueta de la vista "Hoy": cuatro columnas con tarjetas fantasma
 export function TodaySkeleton() {
   return (
     <div className="today-groups">
-      {[2, 2, 3].map((cards, groupIndex) => (
+      {[2, 2, 3, 1].map((cards, groupIndex) => (
         <div key={groupIndex} className="today-group">
           <div className="skeleton skeleton-heading" />
           {Array.from({ length: cards }, (_, i) => (
