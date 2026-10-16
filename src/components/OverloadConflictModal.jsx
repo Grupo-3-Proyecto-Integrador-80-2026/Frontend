@@ -9,8 +9,13 @@ import DateField from './DateField'
 import { formatDateFromISO, todayISO } from '../utils/validators'
 import { apiFetch } from '../api/client'
 
+/**
+ * Modal de resolución del conflicto por sobrecarga diaria (US-07, US-08).
+ * Quien lo usa lo monta solo cuando hay un conflicto, así cada conflicto
+ * arranca con su propio estado (fecha sugerida, horas) y los hooks se
+ * ejecutan siempre en el mismo orden.
+ */
 export default function OverloadConflictModal({
-  isOpen,
   conflictData,
   subtask,
   eventDate,
@@ -18,8 +23,6 @@ export default function OverloadConflictModal({
   onResolved,
   onCancel,
 }) {
-  if (!isOpen || !conflictData) return null
-
   const limitHours = conflictData.limit_hours ?? 6
   const plannedHours = conflictData.planned_hours ?? 0
   const attemptedHours = Number(conflictData.subtask_hours || subtask?.estimated_hours || 1)

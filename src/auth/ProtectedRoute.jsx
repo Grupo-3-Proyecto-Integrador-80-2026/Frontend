@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
-import StatusMessage from '../components/StatusMessage'
+import SessionCheck from '../components/SessionCheck'
 
 /**
  * Envuelve las rutas privadas (/hoy, /crear, /evento/:id, /eventos):
@@ -11,11 +11,7 @@ export default function ProtectedRoute() {
   const location = useLocation()
 
   if (status === 'checking') {
-    return (
-      <div className="auth-checking">
-        <StatusMessage variant="loading" title="Verificando tu sesión..." />
-      </div>
-    )
+    return <SessionCheck />
   }
 
   if (status === 'anonymous') {
@@ -31,11 +27,7 @@ export function PublicOnlyRoute() {
   const location = useLocation()
 
   if (status === 'checking') {
-    return (
-      <div className="auth-checking">
-        <StatusMessage variant="loading" title="Verificando tu sesión..." />
-      </div>
-    )
+    return <SessionCheck />
   }
 
   if (status === 'authenticated') {
