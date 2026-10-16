@@ -543,36 +543,39 @@ function TodaySummary({ data, events, dailyLimit }) {
           <h3>Resumen</h3>
         </div>
 
-        {/* Un indicador por columna, con el mismo color e ícono que su grupo */}
-        <ul className="today-stats plain-list">
-          {[...GROUPS, POSTPONED_GROUP].map((group) => (
-            <li key={group.key} className={`today-stat today-stat-${group.key}`}>
-              <span className="today-stat-top">
-                <span className="today-stat-value">{data[group.key]?.length || 0}</span>
-                <group.Icon size={18} className="today-stat-icon" />
-              </span>
-              <span className="today-stat-label">{group.title}</span>
-            </li>
-          ))}
-        </ul>
+        {/* El contenido se centra en vertical cuando la tarjeta vecina es más alta */}
+        <div className="today-summary-body">
+          {/* Un indicador por columna, con el mismo color e ícono que su grupo */}
+          <ul className="today-stats plain-list">
+            {[...GROUPS, POSTPONED_GROUP].map((group) => (
+              <li key={group.key} className={`today-stat today-stat-${group.key}`}>
+                <span className="today-stat-top">
+                  <span className="today-stat-value">{data[group.key]?.length || 0}</span>
+                  <group.Icon size={18} className="today-stat-icon" />
+                </span>
+                <span className="today-stat-label">{group.title}</span>
+              </li>
+            ))}
+          </ul>
 
-        {/* Carga de vencidas + hoy frente al límite diario */}
-        <div className={`today-load ${overLimit ? 'today-load-over' : ''}`}>
-          <div className="today-load-text">
-            <span>Horas por atender</span>
-            <strong>
-              {hoursFormatter.format(pendingHours)} h
-              <span className="today-load-limit"> de {dailyLimit} h/día</span>
-            </strong>
+          {/* Carga de vencidas + hoy frente al límite diario */}
+          <div className={`today-load ${overLimit ? 'today-load-over' : ''}`}>
+            <div className="today-load-text">
+              <span>Horas por atender</span>
+              <strong>
+                {hoursFormatter.format(pendingHours)} h
+                <span className="today-load-limit"> de {dailyLimit} h/día</span>
+              </strong>
+            </div>
+            <div className="today-load-bar" aria-hidden="true">
+              <span style={{ width: `${loadPercent}%` }} />
+            </div>
+            {overLimit && (
+              <p className="today-load-warning">
+                Superas tu límite diario: reprograma o pospone algunas gestiones.
+              </p>
+            )}
           </div>
-          <div className="today-load-bar" aria-hidden="true">
-            <span style={{ width: `${loadPercent}%` }} />
-          </div>
-          {overLimit && (
-            <p className="today-load-warning">
-              Superas tu límite diario: reprograma o pospone algunas gestiones.
-            </p>
-          )}
         </div>
       </section>
 
