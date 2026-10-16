@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
@@ -46,6 +46,8 @@ function getHeaderCopy(pathname) {
 
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  // Estable entre renders: el Sidebar la usa como dependencia de su efecto de foco
+  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), [])
   const location = useLocation()
   const { title, description } = getHeaderCopy(location.pathname)
 
@@ -53,13 +55,14 @@ function AppLayout() {
     <div className="app-layout">
       <Sidebar
         isMobileOpen={isMobileMenuOpen}
-        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onCloseMobile={closeMobileMenu}
       />
 
       <main className="main-viewport">
         <Header
           title={title}
           description={description}
+          isMobileMenuOpen={isMobileMenuOpen}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />
 

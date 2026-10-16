@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   IconCalendar,
   IconClock,
@@ -23,6 +23,27 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
   const { user, logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isLimitModalOpen, setIsLimitModalOpen] = useState(false)
+
+  const sidebarRef = useRef(null)
+
+  // Menú móvil abierto: el foco entra al menú, Escape lo cierra y al cerrarse
+  // el foco vuelve al botón que lo abrió
+  useEffect(() => {
+    if (!isMobileOpen) return undefined
+
+    const opener = document.activeElement
+    sidebarRef.current?.querySelector('a, button')?.focus()
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onCloseMobile()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (opener instanceof HTMLElement && document.contains(opener)) opener.focus()
+    }
+  }, [isMobileOpen, onCloseMobile])
 
   const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email
 
@@ -49,7 +70,11 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
         />
       )}
 
-      <aside className={`main-sidebar ${isMobileOpen ? 'open' : ''}`}>
+      <aside
+        id="main-sidebar"
+        ref={sidebarRef}
+        className={`main-sidebar ${isMobileOpen ? 'open' : ''}`}
+      >
         <div className="sidebar-top">
           <div className="brand-header">
             <div className="brand-logo-box" aria-hidden="true">
@@ -117,10 +142,7 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
         </div>
       </aside>
 
-      <DailyLimitModal
-        isOpen={isLimitModalOpen}
-        onClose={() => setIsLimitModalOpen(false)}
-      />
+      {isLimitModalOpen && <DailyLimitModal onClose={() => setIsLimitModalOpen(false)} />}
     </>
   )
 }

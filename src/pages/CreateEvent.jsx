@@ -10,6 +10,7 @@ import {
   IconX,
 } from '../components/Icons'
 import DateField from '../components/DateField'
+import OverloadConflictModal from '../components/OverloadConflictModal'
 import { apiFetch } from '../api/client'
 import {
   validateEventField,
@@ -35,6 +36,29 @@ const INITIAL_FORM_STATE = {
 
 const EMPTY_FEEDBACK = { type: null, message: '', eventId: null }
 
+const gestionesLabel = (n) => `${n} ${n === 1 ? 'gestión' : 'gestiones'}`
+
+/**
+ * Aviso final al crear el evento: cuántas gestiones del plan se guardaron y,
+ * si alguna no, cuál y por qué (error del servidor o conflicto sin resolver).
+ */
+function buildPlanFeedback(created, saved, failures) {
+  const plan = saved > 0 ? ` con ${gestionesLabel(saved)}` : ''
+  if (failures.length === 0) {
+    return {
+      type: 'success',
+      message: `Evento "${created.name}" creado${plan} para el ${formatDateFromISO(created.event_date)}.`,
+      eventId: created.id,
+    }
+  }
+  const detail = failures.map((f) => `"${f.name}" (${f.reason})`).join('; ')
+  return {
+    type: 'warning',
+    message: `Creamos el evento "${created.name}"${plan}, pero no se guardaron: ${detail}. Puedes agregarlas desde el detalle del evento.`,
+    eventId: created.id,
+  }
+}
+
 // Una fila del plan inicial de gestiones (T1)
 function createPlanRow(key) {
   return {
@@ -54,6 +78,10 @@ export default function CreateEvent() {
   const [touched, setTouched] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState(EMPTY_FEEDBACK)
+
+  // Gestiones del plan que chocaron con el límite diario (409): se resuelven
+  // una por una con el modal de conflicto estándar, ya con el evento creado
+  const [planConflicts, setPlanConflicts] = useState(null)
 
   // Plan inicial de gestiones: filas dinámicas que el usuario agrega o quita
   const [planRows, setPlanRows] = useState([])
@@ -213,45 +241,60 @@ useEffect(() => {
     }
 
     // El evento ya existe: se guardan las gestiones del plan una por una
-    let failedRows = 0
+    let saved = 0
+    const failures = []
+    const queue = []
     for (const row of validatedRows) {
+      const body = {
+        name: row.values.name.trim(),
+        type: row.values.type,
+        scheduled_date: row.values.scheduled_date,
+        estimated_hours: Number(row.values.estimated_hours),
+      }
       try {
-        await apiFetch(`/api/events/${created.id}/subtasks/`, {
-          method: 'POST',
-          body: {
-            name: row.values.name.trim(),
-            type: row.values.type,
-            scheduled_date: row.values.scheduled_date,
-            estimated_hours: Number(row.values.estimated_hours),
-          },
-        })
-      } catch {
-        failedRows += 1
+        await apiFetch(`/api/events/${created.id}/subtasks/`, { method: 'POST', body })
+        saved += 1
+      } catch (err) {
+        if (err.status === 409 && err.details) {
+          queue.push({ subtask: { ...body, event_id: created.id }, conflictData: err.details })
+        } else {
+          failures.push({ name: body.name, reason: err.message })
+        }
       }
     }
 
-    const savedRows = validatedRows.length - failedRows
-    const plan =
-      savedRows > 0 ? ` con ${savedRows} ${savedRows === 1 ? 'gestión' : 'gestiones'}` : ''
-
-    if (failedRows > 0) {
+    if (queue.length > 0) {
+      setPlanConflicts({ event: created, queue, step: 0, saved, failures })
       setFeedback({
         type: 'warning',
-        message: `Creamos el evento "${created.name}"${plan}, pero ${failedRows} ${
-          failedRows === 1 ? 'gestión no se pudo guardar' : 'gestiones no se pudieron guardar'
-        }. Puedes agregarlas desde el detalle del evento.`,
+        message: `Creamos el evento "${created.name}". ${
+          queue.length === 1 ? 'Una gestión del plan supera' : `${queue.length} gestiones del plan superan`
+        } tu límite diario de horas: elige cómo resolver cada una.`,
         eventId: created.id,
       })
     } else {
-      setFeedback({
-        type: 'success',
-        message: `Evento "${created.name}" creado${plan} para el ${formatDateFromISO(created.event_date)}.`,
-        eventId: created.id,
-      })
+      setFeedback(buildPlanFeedback(created, saved, failures))
     }
 
     resetForm()
     setIsSubmitting(false)
+  }
+
+  // Avanza al siguiente conflicto del plan; al terminar muestra el resumen final
+  const advancePlanConflict = (wasSaved) => {
+    const { event: created, queue, step, saved, failures } = planConflicts
+    const [current, ...rest] = queue
+    const nextSaved = saved + (wasSaved ? 1 : 0)
+    const nextFailures = wasSaved
+      ? failures
+      : [...failures, { name: current.subtask.name, reason: 'superaba tu límite diario y no se resolvió' }]
+
+    if (rest.length > 0) {
+      setPlanConflicts({ event: created, queue: rest, step: step + 1, saved: nextSaved, failures: nextFailures })
+    } else {
+      setPlanConflicts(null)
+      setFeedback(buildPlanFeedback(created, nextSaved, nextFailures))
+    }
   }
 
   // Restablecer formulario y estados de validación
@@ -742,6 +785,18 @@ useEffect(() => {
           </div>
         </aside>
       </div>
+
+      {planConflicts && (
+        <OverloadConflictModal
+          key={planConflicts.step}
+          conflictData={planConflicts.queue[0].conflictData}
+          subtask={planConflicts.queue[0].subtask}
+          eventDate={planConflicts.event.event_date}
+          isNew
+          onResolved={() => advancePlanConflict(true)}
+          onCancel={() => advancePlanConflict(false)}
+        />
+      )}
     </div>
   )
 }

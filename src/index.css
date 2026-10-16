@@ -28,16 +28,19 @@
   /* Status Colors */
   --emerald-500: #10b981;
   --emerald-600: #059669;
+  --emerald-700: #047857; /* texto sobre emerald-50 y fondo de botón con texto blanco (>= 5:1) */
   --emerald-50: #ecfdf5;
   --emerald-200: #a7f3d0;
   
   --rose-500: #f43f5e;
   --rose-600: #e11d48;
+  --rose-700: #be123c; /* texto sobre rose-50 (5,7:1) */
   --rose-50: #fff1f2;
   --rose-200: #fecdd3;
 
   --amber-500: #f59e0b;
   --amber-600: #d97706;
+  --amber-700: #b45309; /* texto sobre amber-50 (4,8:1) */
   --amber-50: #fffbeb;
   --amber-200: #fde68a;
 

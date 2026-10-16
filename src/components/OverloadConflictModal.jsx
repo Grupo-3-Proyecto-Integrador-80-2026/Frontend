@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import {
   IconAlertTriangle,
   IconCheckCircle,
@@ -8,18 +8,26 @@ import {
 import DateField from './DateField'
 import { formatDateFromISO, todayISO } from '../utils/validators'
 import { apiFetch } from '../api/client'
+import useDialogFocus from './useDialogFocus'
 
 /**
  * Modal de resolución del conflicto por sobrecarga diaria (US-07, US-08).
  * Quien lo usa lo monta solo cuando hay un conflicto, así cada conflicto
  * arranca con su propio estado (fecha sugerida, horas) y los hooks se
  * ejecutan siempre en el mismo orden.
+ *
+ * - `pendingChanges`: los demás cambios del formulario que originó el conflicto
+ *   (nombre, nota, prioridad...). Se envían junto con la resolución para no perderlos.
+ * - `savedHours`: horas que la gestión tiene guardadas; "Reducir horas" solo
+ *   envía resolution=reduce_hours cuando de verdad quedan por debajo de ellas.
  */
 export default function OverloadConflictModal({
   conflictData,
   subtask,
   eventDate,
   isNew = false,
+  pendingChanges = {},
+  savedHours = null,
   onResolved,
   onCancel,
 }) {
@@ -43,6 +51,11 @@ export default function OverloadConflictModal({
   const [reducedHours, setReducedHours] = useState(defaultSuggestedHours)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
+  const titleId = useId()
+  const descriptionId = useId()
+
+  // Foco atrapado y Escape para cerrar (no mientras se guarda)
+  const dialogRef = useDialogFocus({ onClose: onCancel, closeOnEscape: !isSubmitting })
 
   const liveCalculation = useMemo(() => {
     if (selectedAction === 'move') {
@@ -103,6 +116,7 @@ export default function OverloadConflictModal({
         type: subtask?.type || 'other',
         priority: subtask?.priority || 'medium',
         note: subtask?.note || '',
+        ...pendingChanges,
         ...body,
       }
       return await apiFetch(`/api/events/${eventId}/subtasks/`, {
@@ -112,7 +126,7 @@ export default function OverloadConflictModal({
     } else {
       return await apiFetch(`/api/subtasks/${subtask.id}/`, {
         method: 'PATCH',
-        body,
+        body: { ...pendingChanges, ...body },
       })
     }
   }
@@ -132,9 +146,9 @@ export default function OverloadConflictModal({
       )
     } catch (err) {
       if (err.status === 409 && err.details) {
-        setErrorMessage('La fecha elegida también excede tu disponibilidad.')
+        setErrorMessage(`La fecha elegida también excede tu disponibilidad. ${err.message}`)
       } else {
-        setErrorMessage('No se pudo mover la gestión. Inténtalo de nuevo.')
+        setErrorMessage(`No se pudo mover la gestión. ${err.message}`)
       }
     } finally {
       setIsSubmitting(false)
@@ -156,7 +170,10 @@ export default function OverloadConflictModal({
       estimated_hours: numHours,
     }
 
-    if (!isNew && numHours < (subtask?.original_hours || attemptedHours)) {
+    // El backend exige que reduce_hours deje menos horas de las guardadas. Si el
+    // conflicto vino de subir las horas (p. ej. 1h → 3h y se reduce a 2h), se
+    // guarda como un cambio normal y el backend vuelve a validar la sobrecarga.
+    if (!isNew && savedHours !== null && numHours < Number(savedHours)) {
       payload.resolution = 'reduce_hours'
     }
 
@@ -166,8 +183,8 @@ export default function OverloadConflictModal({
         result,
         `Horas ajustadas a ${numHours}h para el ${formatDateFromISO(conflictData.date)}.`
       )
-    } catch {
-      setErrorMessage('No se pudo ajustar las horas. Revisa los datos e intenta nuevamente.')
+    } catch (err) {
+      setErrorMessage(`No se pudo ajustar las horas. ${err.message}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -184,8 +201,8 @@ export default function OverloadConflictModal({
         status: 'postponed',
       })
       onResolved(result, 'Gestión marcada como pospuesta.')
-    } catch {
-      setErrorMessage('No se pudo posponer la gestión.')
+    } catch (err) {
+      setErrorMessage(`No se pudo posponer la gestión. ${err.message}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -205,16 +222,24 @@ export default function OverloadConflictModal({
         result,
         `Gestión guardada para el ${formatDateFromISO(conflictData.date)} asumiendo la sobrecarga.`
       )
-    } catch {
-      setErrorMessage('No se pudo guardar la gestión.')
+    } catch (err) {
+      setErrorMessage(`No se pudo guardar la gestión. ${err.message}`)
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="confirm-dialog-overlay" role="dialog" aria-modal="true">
-      <div className="confirm-dialog" style={{ maxWidth: '480px', textAlign: 'left', padding: '24px', borderRadius: '16px' }}>
+    <div className="confirm-dialog-overlay">
+      <div
+        ref={dialogRef}
+        className="confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        style={{ maxWidth: '480px', textAlign: 'left', padding: '24px', borderRadius: '16px' }}
+      >
         
         {/* Cabecera */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
@@ -222,7 +247,7 @@ export default function OverloadConflictModal({
             <IconAlertTriangle size={20} />
           </div>
           <div style={{ flex: 1 }}>
-            <h2 className="confirm-dialog-title" style={{ margin: 0, fontSize: '18px' }}>
+            <h2 id={titleId} className="confirm-dialog-title" style={{ margin: 0, fontSize: '18px' }}>
               Sobrecarga de horas detectada
             </h2>
             <span style={{ fontSize: '13px', color: '#64748b' }}>
@@ -234,7 +259,8 @@ export default function OverloadConflictModal({
             className="btn-cancel-pro btn-small"
             style={{ padding: '6px', borderRadius: '50%' }}
             onClick={onCancel}
-            aria-label="Cerrar modal"
+            disabled={isSubmitting}
+            aria-label="Cerrar"
           >
             <IconX size={16} />
           </button>
@@ -242,6 +268,7 @@ export default function OverloadConflictModal({
 
         {/* Banner de explicación */}
         <div
+          id={descriptionId}
           style={{
             margin: '0 0 16px 0',
             borderRadius: '10px',
@@ -253,6 +280,9 @@ export default function OverloadConflictModal({
             lineHeight: 1.45,
           }}
         >
+          {conflictData.message && (
+            <strong style={{ display: 'block', marginBottom: '4px' }}>{conflictData.message}</strong>
+          )}
           El <strong>{formatDateFromISO(conflictData.date)}</strong> ya cuenta con <strong>{plannedHours}h</strong> planificadas. Si sumas las <strong>{attemptedHours}h</strong> de esta tarea, acumularás <strong>{plannedHours + attemptedHours}h</strong> (tu límite diario es de {limitHours}h).
         </div>
 
@@ -276,6 +306,7 @@ export default function OverloadConflictModal({
               style={{ justifyContent: 'center', padding: '8px' }}
               onClick={() => setSelectedAction('move')}
               disabled={isSubmitting}
+              aria-pressed={selectedAction === 'move'}
             >
               1. Mover a otra fecha
             </button>
@@ -285,6 +316,7 @@ export default function OverloadConflictModal({
               style={{ justifyContent: 'center', padding: '8px' }}
               onClick={() => setSelectedAction('reduce')}
               disabled={isSubmitting}
+              aria-pressed={selectedAction === 'reduce'}
             >
               2. Reducir horas
             </button>
@@ -312,6 +344,7 @@ export default function OverloadConflictModal({
                           style={{ fontSize: '12px', padding: '5px 10px' }}
                           onClick={() => setTargetDate(d)}
                           disabled={isSubmitting}
+                          aria-pressed={targetDate === d}
                         >
                           <IconCalendar size={13} style={{ marginRight: '4px' }} />
                           {formatDateFromISO(d)}

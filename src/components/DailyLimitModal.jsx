@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useId, useRef, useState } from 'react'
 import {
   IconClock,
   IconX,
@@ -9,6 +9,7 @@ import {
 import { apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { formatDateFromISO } from '../utils/validators'
+import useDialogFocus from './useDialogFocus'
 
 const MIN_LIMIT = 1
 const MAX_LIMIT = 16
@@ -64,7 +65,12 @@ async function checkCurrentOverload(newLimit) {
   }
 }
 
-export default function DailyLimitModal({ isOpen, onClose }) {
+/**
+ * Modal para configurar el límite diario de horas (US-12).
+ * Quien lo usa lo monta solo mientras está abierto, así cada apertura arranca
+ * con el límite vigente del usuario.
+ */
+export default function DailyLimitModal({ onClose }) {
   const { user, updateUser } = useAuth()
   const initialValue = user?.daily_hours_limit ?? DEFAULT_LIMIT
 
@@ -72,16 +78,16 @@ export default function DailyLimitModal({ isOpen, onClose }) {
   const [errorMsg, setErrorMsg] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState({ type: null, message: '', overloadedDays: [] })
+  const inputRef = useRef(null)
+  const errorId = useId()
+  const hintId = useId()
 
-  useEffect(() => {
-    if (isOpen) {
-      setLimit(String(user?.daily_hours_limit ?? DEFAULT_LIMIT))
-      setErrorMsg(null)
-      setFeedback({ type: null, message: '', overloadedDays: [] })
-    }
-  }, [isOpen, user?.daily_hours_limit])
-
-  if (!isOpen) return null
+  // Foco en el campo, atrapado en el modal, y Escape para cerrar (no mientras se guarda)
+  const dialogRef = useDialogFocus({
+    onClose,
+    initialFocusRef: inputRef,
+    closeOnEscape: !isSubmitting,
+  })
 
   const handleInputChange = (e) => {
     const val = e.target.value
@@ -135,10 +141,10 @@ export default function DailyLimitModal({ isOpen, onClose }) {
         })
       }
       // Nota: Eliminamos el timer de cierre automático. El usuario decide cuándo salir.
-    } catch {
+    } catch (err) {
       setFeedback({
         type: 'error',
-        message: 'No se pudo guardar la configuración. Revisa tu conexión.',
+        message: `No se pudo guardar la configuración. ${err.message}`,
         overloadedDays: [],
       })
     } finally {
@@ -149,8 +155,15 @@ export default function DailyLimitModal({ isOpen, onClose }) {
   const isCompleted = feedback.type === 'success' || feedback.type === 'warning'
 
   return (
-    <div className="confirm-dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="limit-modal-title">
-      <div className="confirm-dialog" style={{ maxWidth: '440px', textAlign: 'left', padding: '24px' }}>
+    <div className="confirm-dialog-overlay">
+      <div
+        ref={dialogRef}
+        className="confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="limit-modal-title"
+        style={{ maxWidth: '440px', textAlign: 'left', padding: '24px' }}
+      >
         
         {/* Cabecera limpia */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -167,6 +180,7 @@ export default function DailyLimitModal({ isOpen, onClose }) {
             className="btn-cancel-pro btn-small"
             style={{ padding: '6px', borderRadius: '50%' }}
             onClick={onClose}
+            disabled={isSubmitting}
             aria-label="Cerrar ventana"
           >
             <IconX size={16} />
@@ -272,17 +286,23 @@ export default function DailyLimitModal({ isOpen, onClose }) {
               onChange={handleInputChange}
               className={`field-input ${isInvalid ? 'field-input-error' : ''}`}
               placeholder="Ej: 6"
-              autoFocus
+              ref={inputRef}
               disabled={isSubmitting || isCompleted}
               aria-invalid={isInvalid}
+              aria-describedby={errorMsg ? `${errorId} ${hintId}` : hintId}
               style={{ fontSize: '15px' }}
             />
             {errorMsg && (
-              <span className="field-error-text" style={{ marginTop: '5px', display: 'block' }}>
+              <span
+                id={errorId}
+                className="field-error-text"
+                role="alert"
+                style={{ marginTop: '5px', display: 'block' }}
+              >
                 {errorMsg}
               </span>
             )}
-            <small className="field-hint" style={{ marginTop: '6px', display: 'block' }}>
+            <small id={hintId} className="field-hint" style={{ marginTop: '6px', display: 'block' }}>
               Valor habitual recomendado: 6 horas/día.
             </small>
           </div>
@@ -294,6 +314,8 @@ export default function DailyLimitModal({ isOpen, onClose }) {
                 className="btn-submit-pro"
                 onClick={onClose}
                 style={{ width: '100%', justifyContent: 'center' }}
+                // Al guardar desaparece el botón que tenía el foco: se pasa a este
+                autoFocus
               >
                 Entendido
               </button>
