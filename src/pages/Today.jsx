@@ -39,21 +39,18 @@ const GROUPS = [
   {
     key: 'overdue',
     title: 'Vencidas',
-    badge: 'Vencida',
     emptyText: 'No tienes gestiones vencidas.',
     Icon: IconAlertTriangle,
   },
   {
     key: 'due_today',
     title: 'Para hoy',
-    badge: 'Para hoy',
     emptyText: 'No tienes gestiones para hoy.',
     Icon: IconClock,
   },
   {
     key: 'upcoming',
     title: 'Próximas',
-    badge: null,
     emptyText: 'No tienes gestiones en los próximos días.',
     Icon: IconCalendar,
   },
@@ -63,7 +60,6 @@ const GROUPS = [
 const POSTPONED_GROUP = {
   key: 'postponed',
   title: 'Pospuestas',
-  badge: null,
   emptyText: 'No tienes gestiones pospuestas.',
   Icon: IconPause,
 }
@@ -100,6 +96,7 @@ function describeRelativeDate(groupKey, scheduledDate, today) {
   const diff = daysBetween(today, scheduledDate)
   if (groupKey === 'overdue') return diff === -1 ? 'ayer' : `hace ${-diff} días`
   if (groupKey === 'upcoming') return diff === 1 ? 'mañana' : `en ${diff} días`
+  if (groupKey === 'due_today') return 'hoy'
   return null
 }
 
@@ -359,37 +356,19 @@ function TodayCard({
   // --- MODO VISTA DE TARJETA ---
   return (
     <li className={`today-card today-card-${group.key} ${afterEvent ? 'card-date-warning' : ''}`}>
-      <div className="today-card-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      {/* La urgencia la indican la columna y su color: la tarjeta no repite la etiqueta */}
+      <div className="today-card-top">
         <h3 className="today-card-title">{task.name}</h3>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {group.badge && (
-            <span className={`urgency-badge urgency-badge-${group.key}`}>{group.badge}</span>
-          )}
-
-          <button
-            type="button"
-            onClick={() => onStartEdit(task)}
-            title="Editar gestión"
-            aria-label={`Editar gestión ${task.name}`}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: '4px',
-              cursor: 'pointer',
-              borderRadius: '6px',
-              color: '#475569',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            <IconEdit size={16} />
-          </button>
-        </div>
+        <button
+          type="button"
+          className="today-card-edit"
+          onClick={() => onStartEdit(task)}
+          title="Editar gestión"
+          aria-label={`Editar gestión ${task.name}`}
+        >
+          <IconEdit size={16} />
+        </button>
       </div>
 
       <Link to={`/evento/${task.event_id}`} className="today-card-event">
@@ -400,15 +379,7 @@ function TodayCard({
         <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
           <button
             type="button"
-            className="today-meta-item"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              font: 'inherit',
-              cursor: 'pointer',
-              color: 'inherit',
-            }}
+            className="today-meta-item today-date-btn"
             onClick={triggerPicker}
             title="Haz clic para reprogramar fecha"
             aria-label={`Fecha actual: ${formatDateFromISO(task.scheduled_date)}. Haz clic para cambiarla`}
