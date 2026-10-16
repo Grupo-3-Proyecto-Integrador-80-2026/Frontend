@@ -1352,6 +1352,20 @@ textarea {
   }
 }
 
+/* Las dos tarjetas miden lo mismo (la fila se estira a la más alta); el
+   contenido del resumen se centra en vertical para no dejar un hueco abajo */
+.today-summary-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.today-summary-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 /* Indicadores del resumen: número grande + etiqueta, con el color de cada grupo */
 .today-stats {
   display: grid;

@@ -4,7 +4,20 @@ import { IconCalendar, IconMapPin, IconUser, IconPlus, IconAlertTriangle, IconRe
 import StatusMessage from '../components/StatusMessage'
 import LoadingOverlay, { EventsSkeleton } from '../components/LoadingOverlay'
 import { apiFetch } from '../api/client'
-import { formatDateFromISO, getOptionLabel, EVENT_TYPES, EVENT_STATUSES } from '../utils/validators'
+import { formatDateFromISO, getOptionLabel, todayISO, EVENT_TYPES, EVENT_STATUSES } from '../utils/validators'
+
+/**
+ * Orden de la lista: primero los eventos por venir, del más cercano al más lejano;
+ * al final los que ya pasaron, del más reciente al más antiguo.
+ */
+function sortByProximity(events) {
+  const today = todayISO()
+  const upcoming = events.filter((ev) => ev.event_date >= today)
+  const past = events.filter((ev) => ev.event_date < today)
+  upcoming.sort((a, b) => a.event_date.localeCompare(b.event_date))
+  past.sort((a, b) => b.event_date.localeCompare(a.event_date))
+  return [...upcoming, ...past]
+}
 
 export default function Events() {
   const [attempt, setAttempt] = useState(0)
@@ -13,7 +26,9 @@ export default function Events() {
   useEffect(() => {
     const controller = new AbortController()
     apiFetch('/api/events/', { signal: controller.signal })
-      .then((data) => setResult({ attempt, events: Array.isArray(data) ? data : [], error: null }))
+      .then((data) =>
+        setResult({ attempt, events: sortByProximity(Array.isArray(data) ? data : []), error: null })
+      )
       .catch((err) => {
         if (err.name !== 'AbortError') setResult({ attempt, events: [], error: err.message })
       })
