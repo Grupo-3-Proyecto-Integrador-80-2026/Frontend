@@ -1338,33 +1338,182 @@ textarea {
   gap: 1.25rem;
 }
 
-/* Resumen y Próximos eventos van arriba, uno junto al otro, sobre las columnas */
+/* Resumen y Próximos eventos van arriba, mitad y mitad, sobre las columnas */
 .today-aside {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.25rem;
   align-items: stretch;
-}
-
-/* Las cifras del resumen se reparten en columnas para no alargar la tarjeta */
-.today-summary-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  column-gap: 1.5rem;
 }
 
 @media (max-width: 900px) {
   .today-aside {
     grid-template-columns: 1fr;
   }
-  .today-summary-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+}
+
+/* Indicadores del resumen: número grande + etiqueta, con el color de cada grupo */
+.today-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.today-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  min-width: 0;
+}
+
+.today-stat-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.today-stat-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.today-stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.today-stat-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* Indicadores sobrios: fondo neutro y texto oscuro; solo el ícono lleva el color de su grupo */
+.today-stat {
+  background-color: var(--slate-50);
+  border-color: var(--slate-200);
+}
+
+.today-stat-value { color: var(--slate-900); }
+.today-stat-label { color: var(--slate-600); }
+
+.today-stat-overdue .today-stat-icon { color: var(--urgency-overdue); }
+.today-stat-due_today .today-stat-icon { color: var(--urgency-today); }
+.today-stat-upcoming .today-stat-icon { color: var(--urgency-upcoming); }
+.today-stat-postponed .today-stat-icon { color: var(--slate-500); }
+
+/* Barra de carga: horas de vencidas + hoy frente al límite diario */
+.today-load {
+  margin-top: 0.9rem;
+}
+
+.today-load-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: var(--text-sm);
+  color: var(--slate-600);
+  font-weight: 600;
+}
+
+.today-load-text strong {
+  color: var(--slate-900);
+  font-size: var(--text-base, 1rem);
+}
+
+.today-load-limit {
+  color: var(--slate-500);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.today-load-bar {
+  margin-top: 0.4rem;
+  height: 8px;
+  border-radius: 999px;
+  background-color: var(--slate-100);
+  overflow: hidden;
+}
+
+.today-load-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--slate-500);
+  transition: width 0.3s ease;
+}
+
+.today-load-over .today-load-bar span { background-color: var(--urgency-overdue); }
+.today-load-over .today-load-text strong { color: var(--urgency-overdue); }
+
+.today-load-warning {
+  margin: 0.4rem 0 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--urgency-overdue);
+}
+
+/* Próximos eventos: ícono, nombre con fecha y cuántos días faltan */
+.today-next-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.today-next-event {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  background-color: var(--slate-50);
+}
+
+.today-next-event-date {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background-color: var(--urgency-upcoming-bg);
+  color: var(--urgency-upcoming);
+}
+
+.today-next-event-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.today-next-event-meta {
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+  font-weight: 600;
+}
+
+.today-next-event-days {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--slate-700);
+  background-color: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
 }
 
 @media (max-width: 520px) {
-  .today-summary-stats {
-    grid-template-columns: 1fr;
+  .today-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
