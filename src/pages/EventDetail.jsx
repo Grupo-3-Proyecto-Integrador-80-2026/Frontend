@@ -84,6 +84,14 @@ function buildSubtaskFormValues(task) {
   }
 }
 
+/** Fecha programada más tardía entre las gestiones del evento (ISO), o null si no hay. */
+function latestSubtaskDate(subtasks) {
+  return (Array.isArray(subtasks) ? subtasks : []).reduce(
+    (latest, t) => (t.scheduled_date && (!latest || t.scheduled_date > latest) ? t.scheduled_date : latest),
+    null
+  )
+}
+
 function subtasksProgressKey(subtasks) {
   return (Array.isArray(subtasks) ? subtasks : []).map((t) => `${t.id}:${t.status}`).join(',')
 }
@@ -251,6 +259,7 @@ export default function EventDetail() {
           isNew: true,
         })
       } else {
+        setSubtaskErrors((prev) => ({ ...prev, ...(err.fieldErrors || {}) }))
         setFeedback({ type: 'error', message: err.message })
       }
     } finally {
@@ -351,6 +360,10 @@ export default function EventDetail() {
     setEventTouched(allTouched)
 
     const formErrors = validateEventForm(eventForm, { originalDate: event.event_date })
+    const lastSubtaskDate = latestSubtaskDate(event.subtasks)
+    if (!formErrors.event_date && lastSubtaskDate && eventForm.event_date < lastSubtaskDate) {
+      formErrors.event_date = `La fecha del evento no puede quedar antes de sus gestiones; la última está programada para el ${formatDateFromISO(lastSubtaskDate)}.`
+    }
     setEventErrors(formErrors)
 
     if (Object.keys(formErrors).length > 0) {
@@ -383,6 +396,8 @@ export default function EventDetail() {
         details: data,
       })
     } catch (err) {
+      // Los errores por campo del servidor se muestran junto a cada campo
+      setEventErrors((prev) => ({ ...prev, ...(err.fieldErrors || {}) }))
       setEventFeedback({ type: 'error', message: err.message })
     } finally {
       setIsEventSubmitting(false)
@@ -510,13 +525,15 @@ export default function EventDetail() {
       })
     } catch (err) {
       if (err.status === 409 && err.details) {
-        const currentSubtask = {
-          ...(event?.subtasks?.find((s) => s.id === subtaskId) || {}),
-          ...entry.form,
-          id: subtaskId,
-        }
+        const savedSubtask = event?.subtasks?.find((s) => s.id === subtaskId) || {}
+        // El modal resuelve fecha y horas; el resto de lo editado viaja con la resolución
+        const pendingChanges = { ...payload }
+        delete pendingChanges.scheduled_date
+        delete pendingChanges.estimated_hours
         setConflictState({
-          subtask: currentSubtask,
+          subtask: { ...savedSubtask, ...entry.form, id: subtaskId },
+          pendingChanges,
+          savedHours: savedSubtask.estimated_hours ?? null,
           conflictData: err.details,
           eventDate: event.event_date,
         })
@@ -625,7 +642,7 @@ export default function EventDetail() {
         </div>
       )}
 
-      {eventFeedback.type === 'error' && !isEditingEvent && (
+      {eventFeedback.type === 'error' && (
         <div className="banner-alert banner-error" role="alert">
           <div className="banner-icon-side">
             <IconAlertTriangle size={20} className="icon-rose" />
@@ -691,9 +708,11 @@ export default function EventDetail() {
                 className={`field-input ${eventTouched.name && eventErrors.name ? 'field-input-error' : ''}`}
                 required
                 maxLength={200}
+                aria-invalid={Boolean(eventTouched.name && eventErrors.name)}
+                aria-describedby={eventTouched.name && eventErrors.name ? 'event-name-error' : undefined}
               />
               {eventTouched.name && eventErrors.name && (
-                <span className="field-error-text">{eventErrors.name}</span>
+                <span id="event-name-error" className="field-error-text">{eventErrors.name}</span>
               )}
             </div>
 
@@ -708,14 +727,19 @@ export default function EventDetail() {
                   value={eventForm.event_type}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  className="field-input field-select"
+                  className={`field-input field-select ${eventTouched.event_type && eventErrors.event_type ? 'field-input-error' : ''}`}
                   required
+                  aria-invalid={Boolean(eventTouched.event_type && eventErrors.event_type)}
+                  aria-describedby={eventTouched.event_type && eventErrors.event_type ? 'event-type-error' : undefined}
                 >
                   <option value="" disabled>Selecciona un tipo</option>
                   {EVENT_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
+                {eventTouched.event_type && eventErrors.event_type && (
+                  <span id="event-type-error" className="field-error-text">{eventErrors.event_type}</span>
+                )}
               </div>
 
               <div className="field-group">
@@ -728,13 +752,18 @@ export default function EventDetail() {
                   value={eventForm.status}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  className="field-input field-select"
+                  className={`field-input field-select ${eventTouched.status && eventErrors.status ? 'field-input-error' : ''}`}
                   required
+                  aria-invalid={Boolean(eventTouched.status && eventErrors.status)}
+                  aria-describedby={eventTouched.status && eventErrors.status ? 'event-status-error' : undefined}
                 >
                   {EVENT_STATUSES.map((st) => (
                     <option key={st.value} value={st.value}>{st.label}</option>
                   ))}
                 </select>
+                {eventTouched.status && eventErrors.status && (
+                  <span id="event-status-error" className="field-error-text">{eventErrors.status}</span>
+                )}
               </div>
             </div>
 
@@ -750,9 +779,14 @@ export default function EventDetail() {
                   min={event.event_date < todayISO() ? event.event_date : todayISO()}
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
-                  className="field-input"
+                  className={`field-input ${eventTouched.event_date && eventErrors.event_date ? 'field-input-error' : ''}`}
                   required
+                  aria-invalid={Boolean(eventTouched.event_date && eventErrors.event_date)}
+                  aria-describedby={eventTouched.event_date && eventErrors.event_date ? 'event-date-error' : undefined}
                 />
+                {eventTouched.event_date && eventErrors.event_date && (
+                  <span id="event-date-error" className="field-error-text">{eventErrors.event_date}</span>
+                )}
               </div>
 
               <div className="field-group">
@@ -765,8 +799,13 @@ export default function EventDetail() {
                   onChange={handleChangeEvent}
                   onBlur={handleBlurEvent}
                   maxLength={255}
+                  aria-invalid={Boolean(eventTouched.contact && eventErrors.contact)}
+                  aria-describedby={eventTouched.contact && eventErrors.contact ? 'event-contact-error' : undefined}
                   className="field-input"
                 />
+                {eventTouched.contact && eventErrors.contact && (
+                  <span id="event-contact-error" className="field-error-text">{eventErrors.contact}</span>
+                )}
               </div>
             </div>
 
@@ -780,8 +819,13 @@ export default function EventDetail() {
                 onChange={handleChangeEvent}
                 onBlur={handleBlurEvent}
                 maxLength={255}
+                aria-invalid={Boolean(eventTouched.location && eventErrors.location)}
+                aria-describedby={eventTouched.location && eventErrors.location ? 'event-location-error' : undefined}
                 className="field-input"
               />
+              {eventTouched.location && eventErrors.location && (
+                <span id="event-location-error" className="field-error-text">{eventErrors.location}</span>
+              )}
             </div>
 
             <div className="field-group">
@@ -797,8 +841,13 @@ export default function EventDetail() {
                 onBlur={handleBlurEvent}
                 rows="3"
                 maxLength={2000}
+                aria-invalid={Boolean(eventTouched.description && eventErrors.description)}
+                aria-describedby={eventTouched.description && eventErrors.description ? 'event-description-error' : undefined}
                 className="field-input field-textarea"
               />
+              {eventTouched.description && eventErrors.description && (
+                <span id="event-description-error" className="field-error-text">{eventErrors.description}</span>
+              )}
             </div>
 
             <div className="form-actions-row">
@@ -851,7 +900,7 @@ export default function EventDetail() {
         <div className="section-header-row">
           <div>
             <h2 className="section-title">Gestiones del evento</h2>
-            <p className="section-subtitle">Subtareas logísticas para mantener la producción en marcha</p>
+            <p className="section-subtitle">Gestiones logísticas para mantener la producción en marcha</p>
           </div>
           <div className="header-right">
             <span className="badge-chip">
@@ -927,7 +976,7 @@ export default function EventDetail() {
               </div>
               <div>
                 <h2 className="form-heading">Nueva gestión</h2>
-                <p className="form-subheading">Registro de una subtarea logística del evento</p>
+                <p className="form-subheading">Registro de una gestión logística del evento</p>
               </div>
             </div>
 
@@ -956,9 +1005,11 @@ export default function EventDetail() {
                   className={`field-input ${subtaskTouched.name && subtaskErrors.name ? 'field-input-error' : ''}`}
                   required
                   maxLength={200}
+                  aria-invalid={Boolean(subtaskTouched.name && subtaskErrors.name)}
+                  aria-describedby={subtaskTouched.name && subtaskErrors.name ? 'subtask-name-error' : undefined}
                 />
                 {subtaskTouched.name && subtaskErrors.name && (
-                  <span className="field-error-text">{subtaskErrors.name}</span>
+                  <span id="subtask-name-error" className="field-error-text">{subtaskErrors.name}</span>
                 )}
               </div>
 
@@ -973,14 +1024,19 @@ export default function EventDetail() {
                     value={subtaskForm.type}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
-                    className="field-input field-select"
+                    className={`field-input field-select ${subtaskTouched.type && subtaskErrors.type ? 'field-input-error' : ''}`}
                     required
+                    aria-invalid={Boolean(subtaskTouched.type && subtaskErrors.type)}
+                    aria-describedby={subtaskTouched.type && subtaskErrors.type ? 'subtask-type-error' : undefined}
                   >
                     <option value="" disabled>Selecciona un tipo</option>
                     {TASK_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
+                  {subtaskTouched.type && subtaskErrors.type && (
+                    <span id="subtask-type-error" className="field-error-text">{subtaskErrors.type}</span>
+                  )}
                 </div>
 
                 <div className="field-group">
@@ -1013,11 +1069,13 @@ export default function EventDetail() {
                     max={event.event_date}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
-                    className="field-input"
+                    className={`field-input ${subtaskTouched.scheduled_date && subtaskErrors.scheduled_date ? 'field-input-error' : ''}`}
                     required
+                    aria-invalid={Boolean(subtaskTouched.scheduled_date && subtaskErrors.scheduled_date)}
+                    aria-describedby={subtaskTouched.scheduled_date && subtaskErrors.scheduled_date ? 'subtask-date-error' : undefined}
                   />
                   {subtaskTouched.scheduled_date && subtaskErrors.scheduled_date && (
-                    <span className="field-error-text">{subtaskErrors.scheduled_date}</span>
+                    <span id="subtask-date-error" className="field-error-text">{subtaskErrors.scheduled_date}</span>
                   )}
                 </div>
 
@@ -1035,9 +1093,14 @@ export default function EventDetail() {
                     placeholder="Ej: 2.5"
                     min="0"
                     step="0.1"
-                    className="field-input"
+                    className={`field-input ${subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'field-input-error' : ''}`}
                     required
+                    aria-invalid={Boolean(subtaskTouched.estimated_hours && subtaskErrors.estimated_hours)}
+                    aria-describedby={subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'subtask-hours-error' : undefined}
                   />
+                  {subtaskTouched.estimated_hours && subtaskErrors.estimated_hours && (
+                    <span id="subtask-hours-error" className="field-error-text">{subtaskErrors.estimated_hours}</span>
+                  )}
                 </div>
               </div>
 
@@ -1139,9 +1202,10 @@ export default function EventDetail() {
                           required
                           maxLength={200}
                           aria-invalid={editEntry.touched.name && !!editEntry.errors.name}
+                          aria-describedby={editEntry.touched.name && editEntry.errors.name ? `edit-${task.id}-name-error` : undefined}
                         />
                         {editEntry.touched.name && editEntry.errors.name && (
-                          <span className="field-error-text">{editEntry.errors.name}</span>
+                          <span id={`edit-${task.id}-name-error`} className="field-error-text">{editEntry.errors.name}</span>
                         )}
                       </div>
 
@@ -1159,6 +1223,7 @@ export default function EventDetail() {
                           className={`field-input field-select ${editEntry.touched.type && editEntry.errors.type ? 'field-input-error' : ''}`}
                           required
                           aria-invalid={editEntry.touched.type && !!editEntry.errors.type}
+                          aria-describedby={editEntry.touched.type && editEntry.errors.type ? `edit-${task.id}-type-error` : undefined}
                         >
                           <option value="" disabled>Selecciona un tipo</option>
                           {TASK_TYPES.map((t) => (
@@ -1166,7 +1231,7 @@ export default function EventDetail() {
                           ))}
                         </select>
                         {editEntry.touched.type && editEntry.errors.type && (
-                          <span className="field-error-text">{editEntry.errors.type}</span>
+                          <span id={`edit-${task.id}-type-error`} className="field-error-text">{editEntry.errors.type}</span>
                         )}
                       </div>
 
@@ -1186,9 +1251,10 @@ export default function EventDetail() {
                           className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
                           required
                           aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
+                          aria-describedby={editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? `edit-${task.id}-scheduled_date-error` : undefined}
                         />
                         {editEntry.touched.scheduled_date && editEntry.errors.scheduled_date && (
-                          <span className="field-error-text">{editEntry.errors.scheduled_date}</span>
+                          <span id={`edit-${task.id}-scheduled_date-error`} className="field-error-text">{editEntry.errors.scheduled_date}</span>
                         )}
                       </div>
 
@@ -1210,9 +1276,10 @@ export default function EventDetail() {
                           className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
                           required
                           aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
+                          aria-describedby={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? `edit-${task.id}-estimated_hours-error` : undefined}
                         />
                         {editEntry.touched.estimated_hours && editEntry.errors.estimated_hours && (
-                          <span className="field-error-text">{editEntry.errors.estimated_hours}</span>
+                          <span id={`edit-${task.id}-estimated_hours-error`} className="field-error-text">{editEntry.errors.estimated_hours}</span>
                         )}
                       </div>
 
@@ -1466,6 +1533,8 @@ export default function EventDetail() {
           subtask={conflictState?.subtask}
           eventDate={conflictState?.eventDate}
           isNew={Boolean(conflictState?.isNew)}
+          pendingChanges={conflictState.pendingChanges}
+          savedHours={conflictState.savedHours ?? null}
           onResolved={(resultTask, message) => {
             const wasNew = conflictState?.isNew
             setConflictState(null)
@@ -1489,12 +1558,13 @@ export default function EventDetail() {
         />
       )}
 
-      <PostponeModal
-        isOpen={Boolean(postponeState)}
-        subtask={postponeState}
-        onConfirm={handleConfirmPostpone}
-        onCancel={() => setPostponeState(null)}
-      />
+      {postponeState && (
+        <PostponeModal
+          subtask={postponeState}
+          onConfirm={handleConfirmPostpone}
+          onCancel={() => setPostponeState(null)}
+        />
+      )}
     </div>
   )
 }

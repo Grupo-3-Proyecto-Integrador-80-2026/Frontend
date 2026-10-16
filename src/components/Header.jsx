@@ -2,7 +2,7 @@ import { IconMenu } from './Icons'
 
 // Encabezado de cada vista: título + una línea que explica para qué sirve.
 // Reemplaza el antiguo "fecha • Jornada de Producción" y el buscador sin función.
-export default function Header({ title, description, onToggleMobileMenu }) {
+export default function Header({ title, description, isMobileMenuOpen = false, onToggleMobileMenu }) {
   return (
     <header className="main-header">
       <div className="header-left">
@@ -14,7 +14,9 @@ export default function Header({ title, description, onToggleMobileMenu }) {
         <button
           onClick={onToggleMobileMenu}
           className="btn-mobile-menu"
-          aria-label="Abrir menú"
+          aria-label={isMobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={isMobileMenuOpen}
+          aria-controls="main-sidebar"
           type="button"
         >
           <IconMenu size={22} />

@@ -68,6 +68,32 @@ const POSTPONED_GROUP = {
   Icon: IconPause,
 }
 
+// Campos que "Deshacer" puede restaurar tras una acción en Hoy
+const UNDO_FIELDS = ['name', 'type', 'scheduled_date', 'estimated_hours', 'priority', 'note', 'status']
+
+// Tiempo que se muestra el aviso con "Deshacer" (suficiente para llegar con teclado)
+const UNDO_TOAST_MS = 10000
+
+/** Copia de los campos editables de una gestión, para poder restaurarla. */
+function snapshotSubtask(task) {
+  return UNDO_FIELDS.reduce((acc, field) => {
+    acc[field] = task?.[field]
+    return acc
+  }, {})
+}
+
+/** Campos de `previous` que cambiaron respecto a `current` (las horas se comparan como número). */
+function diffSubtask(previous, current) {
+  return UNDO_FIELDS.reduce((acc, field) => {
+    const before = previous[field]
+    const after = current?.[field]
+    const changed =
+      field === 'estimated_hours' ? Number(before) !== Number(after) : (before ?? '') !== (after ?? '')
+    if (changed && before !== undefined) acc[field] = before
+    return acc
+  }, {})
+}
+
 const hoursFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 })
 
 function describeRelativeDate(groupKey, scheduledDate, today) {
@@ -174,9 +200,10 @@ function TodayCard({
               required
               maxLength={200}
               aria-invalid={editEntry.touched.name && !!editEntry.errors.name}
+              aria-describedby={editEntry.touched.name && editEntry.errors.name ? `edit-today-${task.id}-name-error` : undefined}
             />
             {editEntry.touched.name && editEntry.errors.name && (
-              <span className="field-error-text">{editEntry.errors.name}</span>
+              <span id={`edit-today-${task.id}-name-error`} className="field-error-text">{editEntry.errors.name}</span>
             )}
           </div>
 
@@ -194,6 +221,7 @@ function TodayCard({
               className={`field-input field-select ${editEntry.touched.type && editEntry.errors.type ? 'field-input-error' : ''}`}
               required
               aria-invalid={editEntry.touched.type && !!editEntry.errors.type}
+              aria-describedby={editEntry.touched.type && editEntry.errors.type ? `edit-today-${task.id}-type-error` : undefined}
             >
               <option value="" disabled>Selecciona un tipo</option>
               {TASK_TYPES.map((t) => (
@@ -201,7 +229,7 @@ function TodayCard({
               ))}
             </select>
             {editEntry.touched.type && editEntry.errors.type && (
-              <span className="field-error-text">{editEntry.errors.type}</span>
+              <span id={`edit-today-${task.id}-type-error`} className="field-error-text">{editEntry.errors.type}</span>
             )}
           </div>
 
@@ -221,9 +249,10 @@ function TodayCard({
               className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
               required
               aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
+              aria-describedby={editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? `edit-today-${task.id}-scheduled_date-error` : undefined}
             />
             {editEntry.touched.scheduled_date && editEntry.errors.scheduled_date && (
-              <span className="field-error-text">{editEntry.errors.scheduled_date}</span>
+              <span id={`edit-today-${task.id}-scheduled_date-error`} className="field-error-text">{editEntry.errors.scheduled_date}</span>
             )}
           </div>
 
@@ -245,9 +274,10 @@ function TodayCard({
               className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
               required
               aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
+              aria-describedby={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? `edit-today-${task.id}-estimated_hours-error` : undefined}
             />
             {editEntry.touched.estimated_hours && editEntry.errors.estimated_hours && (
-              <span className="field-error-text">{editEntry.errors.estimated_hours}</span>
+              <span id={`edit-today-${task.id}-estimated_hours-error`} className="field-error-text">{editEntry.errors.estimated_hours}</span>
             )}
           </div>
 
@@ -393,6 +423,8 @@ function TodayCard({
             ref={dateInputRef}
             type="date"
             value={task.scheduled_date}
+            min={today || todayISO()}
+            max={eventDate || undefined}
             onChange={(e) => onReschedule(task, e.target.value)}
             style={{
               position: 'absolute',
@@ -576,7 +608,9 @@ export default function Today() {
 
   const [searchParams, setSearchParams] = useSearchParams()
   const eventFilter = searchParams.get('event') || ''
-  const statusFilter = searchParams.get('status') || ''
+  // Un estado que no es filtro de Hoy (p. ej. ?status=done escrito a mano) se ignora
+  const rawStatus = searchParams.get('status') || ''
+  const statusFilter = STATUS_FILTER_OPTIONS.some((o) => o.value === rawStatus) ? rawStatus : ''
   const hasFilters = Boolean(eventFilter || statusFilter)
 
   const [events, setEvents] = useState([])
@@ -635,10 +669,27 @@ export default function Today() {
 
   const eventDateById = new Map(events.map((ev) => [ev.id, ev.event_date]))
 
-  const showUndoToast = (subtask, previousState, message) => {
+  /**
+   * Aviso de éxito con "Deshacer". `previousTask` es la gestión antes del cambio y
+   * `updatedTask` la que devolvió la API; se restaura solo lo que cambió.
+   * Si el cambio movió la gestión desde una fecha que ya pasó, no se ofrece
+   * Deshacer: el backend no permite volver a programar en el pasado.
+   */
+  const showUndoToast = (previousTask, updatedTask, message) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = setTimeout(() => setToast(null), 6000)
-    setToast({ type: 'success', message, subtask, previousState })
+    toastTimerRef.current = setTimeout(() => setToast(null), UNDO_TOAST_MS)
+
+    const undoChanges = diffSubtask(snapshotSubtask(previousTask), updatedTask)
+    const today = data?.today || todayISO()
+    const movedFromPast = Boolean(undoChanges.scheduled_date && undoChanges.scheduled_date < today)
+    const canUndo = Object.keys(undoChanges).length > 0 && !movedFromPast
+
+    setToast({
+      type: 'success',
+      message,
+      subtaskId: previousTask.id,
+      undoChanges: canUndo ? undoChanges : null,
+    })
   }
 
   // Errores de las acciones rápidas: en la página, nunca en un alert() del navegador
@@ -654,21 +705,15 @@ export default function Today() {
   }
 
   const handleUndo = async () => {
-    if (!toast) return
-    const { subtask, previousState } = toast
+    if (!toast?.undoChanges) return
+    const { subtaskId, undoChanges } = toast
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast(null)
 
+    // Sin confirm_overload: si restaurar deja un día sobre el límite, el backend
+    // responde 409 y se avisa en lugar de sobrecargar el día en silencio
     try {
-      await apiFetch(`/api/subtasks/${subtask.id}/`, {
-        method: 'PATCH',
-        body: {
-          scheduled_date: previousState.scheduled_date,
-          status: previousState.status,
-          note: previousState.note,
-          confirm_overload: true,
-        },
-      })
+      await apiFetch(`/api/subtasks/${subtaskId}/`, { method: 'PATCH', body: undoChanges })
       loadToday()
     } catch (err) {
       showErrorToast('No pudimos deshacer el cambio', err)
@@ -795,20 +840,17 @@ export default function Today() {
       })
       handleCancelEditSubtask(subtaskId)
       loadToday()
-      showUndoToast(
-        data,
-        { scheduled_date: task.scheduled_date, status: task.status, note: task.note },
-        `¡Gestión "${data.name}" actualizada con éxito!`
-      )
+      showUndoToast(task, data, `¡Gestión "${data.name}" actualizada con éxito!`)
     } catch (err) {
       if (err.status === 409 && err.details) {
-        const currentSubtask = {
-          ...task,
-          ...entry.form,
-          id: subtaskId,
-        }
+        // El modal resuelve fecha y horas; el resto de lo editado viaja con la resolución
+        const pendingChanges = { ...payload }
+        delete pendingChanges.scheduled_date
+        delete pendingChanges.estimated_hours
         setConflictState({
-          subtask: currentSubtask,
+          subtask: { ...task, ...entry.form, id: subtaskId },
+          original: task,
+          pendingChanges,
           conflictData: err.details,
           eventDate: eventDateById.get(task.event_id),
         })
@@ -833,26 +875,20 @@ export default function Today() {
   }
 
   const handleReschedule = async (task, newDate) => {
-    const previousDate = task.scheduled_date
-    if (newDate === previousDate) return
-
-    const previousSnapshot = {
-      scheduled_date: task.scheduled_date,
-      status: task.status,
-      note: task.note,
-    }
+    if (!newDate || newDate === task.scheduled_date) return
 
     try {
-      await apiFetch(`/api/subtasks/${task.id}/`, {
+      const updated = await apiFetch(`/api/subtasks/${task.id}/`, {
         method: 'PATCH',
         body: { scheduled_date: newDate },
       })
       loadToday()
-      showUndoToast(task, previousSnapshot, `Gestión reprogramada al ${formatDateFromISO(newDate)}`)
+      showUndoToast(task, updated, `Gestión reprogramada al ${formatDateFromISO(newDate)}`)
     } catch (err) {
       if (err.status === 409 && err.details) {
         setConflictState({
           subtask: task,
+          original: task,
           conflictData: err.details,
           eventDate: eventDateById.get(task.event_id),
         })
@@ -863,39 +899,27 @@ export default function Today() {
   }
 
   const handleMarkDone = async (task) => {
-    const previousSnapshot = {
-      scheduled_date: task.scheduled_date,
-      status: task.status,
-      note: task.note,
-    }
-
     try {
-      await apiFetch(`/api/subtasks/${task.id}/`, {
+      const updated = await apiFetch(`/api/subtasks/${task.id}/`, {
         method: 'PATCH',
         body: { status: 'done' },
       })
       loadToday()
-      showUndoToast(task, previousSnapshot, `¡Gestión "${task.name}" completada!`)
+      showUndoToast(task, updated, `¡Gestión "${task.name}" completada!`)
     } catch (err) {
       showErrorToast(`No pudimos marcar "${task.name}" como hecha`, err)
     }
   }
 
   const handleConfirmPostpone = async (task, note) => {
-    const previousSnapshot = {
-      scheduled_date: task.scheduled_date,
-      status: task.status,
-      note: task.note,
-    }
-
     // Si falla, el error sube al modal de posponer, que lo muestra junto al formulario
-    await apiFetch(`/api/subtasks/${task.id}/`, {
+    const updated = await apiFetch(`/api/subtasks/${task.id}/`, {
       method: 'PATCH',
       body: { status: 'postponed', note },
     })
     setPostponeState(null)
     loadToday()
-    showUndoToast(task, previousSnapshot, `Gestión "${task.name}" pospuesta.`)
+    showUndoToast(task, updated, `Gestión "${task.name}" pospuesta.`)
   }
 
   const groupProps = {
@@ -1066,7 +1090,16 @@ export default function Today() {
             <IconCheckCircle size={18} className="icon-emerald" />
           )}
           <span>{toast.message}</span>
-          {toast.type === 'error' ? (
+          {toast.undoChanges ? (
+            <button
+              type="button"
+              className="btn-sec-pro btn-small"
+              onClick={handleUndo}
+              style={{ marginLeft: '8px' }}
+            >
+              Deshacer
+            </button>
+          ) : (
             <button
               type="button"
               className="btn-sec-pro btn-small"
@@ -1075,15 +1108,6 @@ export default function Today() {
               style={{ marginLeft: '8px' }}
             >
               <IconX size={14} />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn-sec-pro btn-small"
-              onClick={handleUndo}
-              style={{ marginLeft: '8px' }}
-            >
-              Deshacer
             </button>
           )}
         </div>
@@ -1094,29 +1118,27 @@ export default function Today() {
           conflictData={conflictState?.conflictData}
           subtask={conflictState?.subtask}
           eventDate={conflictState?.eventDate}
+          pendingChanges={conflictState.pendingChanges}
+          savedHours={conflictState.original.estimated_hours}
           onResolved={(updatedTask, message) => {
-            const prev = conflictState?.subtask
+            // La "foto previa" es la gestión guardada, no el formulario con la fecha nueva
+            const original = conflictState.original
             setConflictState(null)
-            if (prev?.id) {
-              handleCancelEditSubtask(prev.id)
-            }
+            handleCancelEditSubtask(original.id)
             loadToday()
-            showUndoToast(
-              updatedTask,
-              { scheduled_date: prev?.scheduled_date, status: prev?.status, note: prev?.note },
-              message
-            )
+            showUndoToast(original, updatedTask, message)
           }}
           onCancel={() => setConflictState(null)}
         />
       )}
 
-      <PostponeModal
-        isOpen={Boolean(postponeState)}
-        subtask={postponeState}
-        onConfirm={handleConfirmPostpone}
-        onCancel={() => setPostponeState(null)}
-      />
+      {postponeState && (
+        <PostponeModal
+          subtask={postponeState}
+          onConfirm={handleConfirmPostpone}
+          onCancel={() => setPostponeState(null)}
+        />
+      )}
     </div>
   )
 }

@@ -13,26 +13,29 @@ import LoadingOverlay from '../components/LoadingOverlay'
 import { apiFetch } from '../api/client'
 
 export default function Progress() {
-  const [eventsProgress, setEventsProgress] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const loadProgress = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await apiFetch('/api/progress/')
-      setEventsProgress(Array.isArray(data) ? data : [])
-    } catch (err) {
-      setError(err.message || 'No pudimos consultar el progreso de tus eventos.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Igual que en Hoy: cada intento tiene su clave y el estado se deriva de la
+  // respuesta, así no hay setState síncrono dentro del efecto
+  const [attempt, setAttempt] = useState(0)
+  const [result, setResult] = useState({ attempt: null, data: [], error: null })
 
   useEffect(() => {
-    loadProgress()
-  }, [])
+    const controller = new AbortController()
+    apiFetch('/api/progress/', { signal: controller.signal })
+      .then((data) => setResult({ attempt, data: Array.isArray(data) ? data : [], error: null }))
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        setResult({
+          attempt,
+          data: [],
+          error: err.message || 'No pudimos consultar el progreso de tus eventos.',
+        })
+      })
+    return () => controller.abort()
+  }, [attempt])
+
+  const loading = result.attempt !== attempt
+  const { data: eventsProgress, error } = result
+  const loadProgress = () => setAttempt((n) => n + 1)
 
   if (loading) {
     return (
