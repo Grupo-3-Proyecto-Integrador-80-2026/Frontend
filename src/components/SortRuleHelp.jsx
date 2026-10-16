@@ -70,7 +70,8 @@ export default function SortRuleHelp({ windowDays = 7 }) {
           <strong>Para hoy</strong> y <strong>Próximas</strong> (en los siguientes {windowDays} días).
           Dentro de cada grupo se ordenan por fecha: en Vencidas, la más antigua primero; en Próximas,
           la más cercana primero. Si dos gestiones tienen la misma fecha, se muestra primero la de
-          menor esfuerzo estimado.
+          menor esfuerzo estimado. Las <strong>Pospuestas</strong> van aparte, al final: no cuentan como
+          vencidas ni suman horas a tu día.
         </p>
       </div>
     </div>

@@ -9,6 +9,7 @@ import {
   IconRefresh,
   IconX,
   IconEdit,
+  IconPause,
 } from '../components/Icons'
 import SortRuleHelp from '../components/SortRuleHelp'
 import StatusMessage from '../components/StatusMessage'
@@ -57,6 +58,15 @@ const GROUPS = [
     Icon: IconCalendar,
   },
 ]
+
+// Las pospuestas van aparte (US-09): no son carga urgente, pero siguen a la vista
+const POSTPONED_GROUP = {
+  key: 'postponed',
+  title: 'Pospuestas',
+  badge: null,
+  emptyText: 'No tienes gestiones pospuestas.',
+  Icon: IconPause,
+}
 
 const hoursFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 })
 
@@ -444,6 +454,7 @@ function TodayCard({
 function TodayGroup({
   group,
   items,
+  description,
   today,
   windowDays,
   eventDateById,
@@ -470,6 +481,8 @@ function TodayGroup({
           <span className="sr-only"> {items.length === 1 ? 'gestión' : 'gestiones'}</span>
         </span>
       </h2>
+
+      {description && <p className="today-group-desc">{description}</p>}
 
       {items.length === 0 ? (
         <p className="today-group-empty">{group.emptyText}</p>
@@ -524,6 +537,10 @@ function TodaySummary({ data, events, windowDays }) {
             <span className="info-val">{data[group.key]?.length || 0}</span>
           </div>
         ))}
+        <div className="info-row">
+          <span className="info-key">{POSTPONED_GROUP.title}</span>
+          <span className="info-val">{data.postponed?.length || 0}</span>
+        </div>
         <div className="info-row">
           <span className="info-key">Horas por atender</span>
           <span className="info-val">{hoursFormatter.format(pendingHours)} h</span>
@@ -613,7 +630,7 @@ export default function Today() {
 
   const windowDays = data?.upcoming_window_days ?? 7
   const total = data
-    ? GROUPS.reduce((sum, group) => sum + (data[group.key]?.length || 0), 0)
+    ? [...GROUPS, POSTPONED_GROUP].reduce((sum, group) => sum + (data[group.key]?.length || 0), 0)
     : 0
 
   const eventDateById = new Map(events.map((ev) => [ev.id, ev.event_date]))
@@ -881,28 +898,40 @@ export default function Today() {
     showUndoToast(task, previousSnapshot, `Gestión "${task.name}" pospuesta.`)
   }
 
+  const groupProps = {
+    eventDateById,
+    today: data?.today,
+    windowDays,
+    editingSubtasks,
+    onStartEdit: handleStartEditSubtask,
+    onCancelEdit: handleCancelEditSubtask,
+    onChangeEdit: handleChangeSubtaskEdit,
+    onBlurEdit: handleBlurSubtaskEdit,
+    onSubmitEdit: handleSubmitSubtaskEdit,
+    onReschedule: handleReschedule,
+    onMarkDone: handleMarkDone,
+    onRequestPostpone: (task) => setPostponeState(task),
+  }
+
+  const postponedItems = data?.postponed || []
+
   const renderGroups = () => (
-    <div className="today-groups">
-      {GROUPS.map((group) => (
+    <>
+      <div className="today-groups">
+        {GROUPS.map((group) => (
+          <TodayGroup key={group.key} group={group} items={data[group.key] || []} {...groupProps} />
+        ))}
+      </div>
+
+      {postponedItems.length > 0 && (
         <TodayGroup
-          key={group.key}
-          group={group}
-          items={data[group.key] || []}
-          eventDateById={eventDateById}
-          today={data.today}
-          windowDays={windowDays}
-          editingSubtasks={editingSubtasks}
-          onStartEdit={handleStartEditSubtask}
-          onCancelEdit={handleCancelEditSubtask}
-          onChangeEdit={handleChangeSubtaskEdit}
-          onBlurEdit={handleBlurSubtaskEdit}
-          onSubmitEdit={handleSubmitSubtaskEdit}
-          onReschedule={handleReschedule}
-          onMarkDone={handleMarkDone}
-          onRequestPostpone={(task) => setPostponeState(task)}
+          group={POSTPONED_GROUP}
+          items={postponedItems}
+          description="No cuentan como vencidas ni suman horas a tu día. Márcalas como hechas o edítalas para retomarlas."
+          {...groupProps}
         />
-      ))}
-    </div>
+      )}
+    </>
   )
 
   let content
@@ -1006,13 +1035,6 @@ export default function Today() {
       {data?.today && (
         <p className="today-date">
           Hoy es <strong>{formatLongDate(data.today)}</strong>
-        </p>
-      )}
-
-      {statusFilter !== 'postponed' && (
-        <p className="field-hint">
-          Las gestiones pospuestas no aparecen aquí ni suman horas a tu día. Para verlas, filtra
-          por Estado: Pospuesto.
         </p>
       )}
 
