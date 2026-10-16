@@ -33,7 +33,11 @@ import {
 } from '../utils/validators'
 import { useAuth } from '../auth/AuthContext'
 
-const STATUS_FILTER_OPTIONS = TASK_STATUSES.filter((status) => status.value !== 'done')
+// Las hechas no aparecen en Hoy y las pospuestas ya tienen su propia columna:
+// el filtro de estado solo distingue Pendiente y En progreso
+const STATUS_FILTER_OPTIONS = TASK_STATUSES.filter(
+  (status) => status.value !== 'done' && status.value !== 'postponed'
+)
 
 const GROUPS = [
   {
@@ -952,7 +956,12 @@ export default function Today() {
         <TodayGroup key={group.key} group={group} items={data[group.key] || []} {...groupProps} />
       ))}
       <TodayGroup
-        group={POSTPONED_GROUP}
+        group={
+          // Con un filtro de estado activo la lista llega vacía: se explica en vez de decir "no tienes"
+          statusFilter
+            ? { ...POSTPONED_GROUP, emptyText: 'El filtro de estado no incluye las pospuestas.' }
+            : POSTPONED_GROUP
+        }
         items={postponedItems}
         description="No suman horas a tu día. Edítalas para retomarlas."
         {...groupProps}
