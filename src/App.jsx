@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
-import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, Link, useLocation } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
+import { IconPlus } from './components/Icons'
 import Today from './pages/Today'
 import Events from './pages/Events'
 import CreateEvent from './pages/CreateEvent'
@@ -50,6 +51,13 @@ function AppLayout() {
   const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), [])
   const location = useLocation()
   const { title, description } = getHeaderCopy(location.pathname)
+  const headerActions =
+    location.pathname === '/eventos' ? (
+      <Link to="/crear" className="btn-primary-action">
+        <IconPlus size={16} />
+        <span>Crear evento</span>
+      </Link>
+    ) : null
 
   return (
     <div className="app-layout">
@@ -64,6 +72,7 @@ function AppLayout() {
           description={description}
           isMobileMenuOpen={isMobileMenuOpen}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          actions={headerActions}
         />
 
         <div className="main-content-scroll">

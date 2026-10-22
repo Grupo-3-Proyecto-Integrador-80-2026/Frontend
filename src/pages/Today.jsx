@@ -5,6 +5,7 @@ import {
   IconCalendar,
   IconCheckCircle,
   IconClock,
+  IconFilter,
   IconPlus,
   IconRefresh,
   IconX,
@@ -1015,51 +1016,57 @@ export default function Today() {
   return (
     <div className="today-page">
       <div className="today-toolbar">
-        <div className="today-filters" role="group" aria-label="Filtrar gestiones">
-          <div className="today-filter">
-            <label htmlFor="filter-event" className="field-label">
-              Evento
-            </label>
-            <select
-              id="filter-event"
-              className="field-input field-select"
-              value={eventFilter}
-              onChange={(e) => updateFilter('event', e.target.value)}
-            >
-              <option value="">Todos</option>
-              {events.map((ev) => (
-                <option key={ev.id} value={String(ev.id)}>
-                  {ev.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="today-filters-block">
+          <h2 id="today-filters-title" className="today-filters-title">
+            <IconFilter size={16} />
+            <span>Filtrar gestiones</span>
+          </h2>
+          <div className="today-filters" role="group" aria-labelledby="today-filters-title">
+            <div className="today-filter">
+              <label htmlFor="filter-event" className="field-label">
+                Evento
+              </label>
+              <select
+                id="filter-event"
+                className="field-input field-select"
+                value={eventFilter}
+                onChange={(e) => updateFilter('event', e.target.value)}
+              >
+                <option value="">Todos</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={String(ev.id)}>
+                    {ev.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="today-filter">
-            <label htmlFor="filter-status" className="field-label">
-              Estado
-            </label>
-            <select
-              id="filter-status"
-              className="field-input field-select"
-              value={statusFilter}
-              onChange={(e) => updateFilter('status', e.target.value)}
-            >
-              <option value="">Todos</option>
-              {STATUS_FILTER_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="today-filter">
+              <label htmlFor="filter-status" className="field-label">
+                Estado
+              </label>
+              <select
+                id="filter-status"
+                className="field-input field-select"
+                value={statusFilter}
+                onChange={(e) => updateFilter('status', e.target.value)}
+              >
+                <option value="">Todos</option>
+                {STATUS_FILTER_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {hasFilters && (
-            <button type="button" className="btn-sec-pro btn-clear-filters" onClick={clearFilters}>
-              <IconX size={14} />
-              <span>Limpiar filtros</span>
-            </button>
-          )}
+            {hasFilters && (
+              <button type="button" className="btn-sec-pro btn-clear-filters" onClick={clearFilters}>
+                <IconX size={14} />
+                <span>Limpiar filtros</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <SortRuleHelp windowDays={windowDays} />
