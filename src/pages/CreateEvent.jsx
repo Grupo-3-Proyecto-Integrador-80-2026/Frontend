@@ -10,7 +10,9 @@ import {
   IconX,
 } from '../components/Icons'
 import DateField from '../components/DateField'
+import HoursInput from '../components/HoursInput'
 import OverloadConflictModal from '../components/OverloadConflictModal'
+import useAutoDismiss from '../components/useAutoDismiss'
 import { apiFetch } from '../api/client'
 import {
   validateEventField,
@@ -88,6 +90,11 @@ export default function CreateEvent() {
   const nextRowKey = useRef(1)
 
   const bannerRef = useRef(null)
+
+  const successBanner = useAutoDismiss(() => setFeedback(EMPTY_FEEDBACK), {
+    active: feedback.type === 'success',
+    resetKey: feedback.message,
+  })
 
 useEffect(() => {
   if (!feedback.type) return
@@ -310,6 +317,7 @@ useEffect(() => {
         <div ref={bannerRef}
           className={`banner-alert ${feedback.type === 'success' ? 'banner-success' : 'banner-warning'}`}
           role="status"
+          {...successBanner}
         >
           <div className="banner-icon-side">
             {feedback.type === 'success' ? (
@@ -657,17 +665,14 @@ useEffect(() => {
                       <label htmlFor={`plan-${row.key}-hours`} className="field-label">
                         Horas estimadas <span className="req-star">*</span>
                       </label>
-                      <input
+                      <HoursInput
                         id={`plan-${row.key}-hours`}
-                        type="number"
                         name="estimated_hours"
                         value={row.values.estimated_hours}
                         onChange={(e) => handlePlanChange(row.key, e)}
                         onBlur={(e) => handlePlanBlur(row.key, e)}
                         placeholder="Ej: 2.5"
-                        min="0"
-                        step="0.1"
-                        className={`field-input ${row.touched.estimated_hours && row.errors.estimated_hours ? 'field-input-error' : ''}`}
+                        className={row.touched.estimated_hours && row.errors.estimated_hours ? 'field-input-error' : ''}
                         aria-invalid={row.touched.estimated_hours && !!row.errors.estimated_hours}
                         aria-describedby={row.errors.estimated_hours ? `plan-${row.key}-hours-error` : undefined}
                       />

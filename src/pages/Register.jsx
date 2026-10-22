@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import PasswordField from '../components/PasswordField'
@@ -6,6 +6,9 @@ import { IconAlertTriangle } from '../components/Icons'
 import { useAuth } from '../auth/AuthContext'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Pasado este tiempo se avisa que el servidor puede estar arrancando (Render en frío)
+const SLOW_NOTICE_MS = 5000
 
 const INITIAL_FORM = { first_name: '', last_name: '', email: '', password: '', password_confirm: '' }
 
@@ -29,6 +32,13 @@ export default function Register() {
   const [errors, setErrors] = useState({})
   const [formError, setFormError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSlow, setIsSlow] = useState(false)
+
+  useEffect(() => {
+    if (!isSubmitting) return undefined
+    const timerId = setTimeout(() => setIsSlow(true), SLOW_NOTICE_MS)
+    return () => clearTimeout(timerId)
+  }, [isSubmitting])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -43,6 +53,7 @@ export default function Register() {
     setFormError(null)
     if (Object.keys(formErrors).length > 0) return
 
+    setIsSlow(false)
     setIsSubmitting(true)
     try {
       // La cuenta queda con sesión iniciada y PublicOnlyRoute lleva a /hoy
@@ -60,6 +71,7 @@ export default function Register() {
       } else {
         setFormError(err.message)
       }
+      setIsSlow(false)
       setIsSubmitting(false)
     }
   }
@@ -78,6 +90,7 @@ export default function Register() {
         aria-invalid={Boolean(errors[name])}
         aria-describedby={errors[name] ? `register-${name}-error` : undefined}
         {...props}
+        disabled={isSubmitting}
       />
       {errors[name] && (
         <span id={`register-${name}-error`} className="field-error-text">
@@ -109,7 +122,7 @@ export default function Register() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="auth-form">
+      <form onSubmit={handleSubmit} noValidate className="auth-form" aria-busy={isSubmitting}>
         <div className="field-row-2">
           {textField('first_name', 'Nombre', { type: 'text', autoComplete: 'given-name', maxLength: 150 })}
           {textField('last_name', 'Apellido', { type: 'text', autoComplete: 'family-name', maxLength: 150 })}
@@ -129,6 +142,7 @@ export default function Register() {
           autoComplete="new-password"
           hint="Mínimo 8 caracteres; evita contraseñas comunes o solo con números."
           error={errors.password}
+          disabled={isSubmitting}
         />
         <PasswordField
           id="register-password-confirm"
@@ -138,11 +152,27 @@ export default function Register() {
           onChange={handleChange}
           autoComplete="new-password"
           error={errors.password_confirm}
+          disabled={isSubmitting}
         />
 
         <button type="submit" className="btn-submit-pro auth-submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}
+          {isSubmitting && (
+            <span className="loading-spinner loading-spinner-sm" aria-hidden="true" />
+          )}
+          <span>{isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}</span>
         </button>
+
+        {isSubmitting && (
+          <p
+            className={isSlow ? 'auth-slow-hint' : 'sr-only'}
+            role="status"
+            aria-live="polite"
+          >
+            {isSlow
+              ? 'Estamos activando el servidor. La primera carga puede tardar hasta un minuto.'
+              : 'Creando cuenta...'}
+          </p>
+        )}
       </form>
     </AuthLayout>
   )

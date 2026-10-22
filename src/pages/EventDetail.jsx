@@ -20,7 +20,9 @@ import {
 import ConfirmDialog from '../components/ConfirmDialog'
 import DateField from '../components/DateField'
 import DateWarning from '../components/DateWarning'
+import HoursInput from '../components/HoursInput'
 import StatusMessage from '../components/StatusMessage'
+import useAutoDismiss from '../components/useAutoDismiss'
 import { apiFetch } from '../api/client'
 import {
   formatDateFromISO,
@@ -128,6 +130,15 @@ export default function EventDetail() {
   // Combinación de gestiones/estados para la que el progreso mostrado es válido
   const progressKeyRef = useRef(null)
   const [fetchedProgress, setFetchedProgress] = useState({ eventId: null, data: null })
+
+  const eventSuccessBanner = useAutoDismiss(() => setEventFeedback(EMPTY_FEEDBACK), {
+    active: eventFeedback.type === 'success',
+    resetKey: eventFeedback.message,
+  })
+  const feedbackSuccessBanner = useAutoDismiss(() => setFeedback(EMPTY_FEEDBACK), {
+    active: feedback.type === 'success',
+    resetKey: feedback.message,
+  })
 
   useEffect(() => {
     const controller = new AbortController()
@@ -625,7 +636,7 @@ export default function EventDetail() {
   return (
     <div className="create-page-container">
       {eventFeedback.type === 'success' && (
-        <div className="banner-alert banner-success" role="alert">
+        <div className="banner-alert banner-success" role="status" {...eventSuccessBanner}>
           <div className="banner-icon-side">
             <IconCheckCircle size={20} className="icon-emerald" />
           </div>
@@ -932,7 +943,7 @@ export default function EventDetail() {
         </div>
 
         {feedback.type === 'success' && (
-          <div className="banner-alert banner-success" role="alert">
+          <div className="banner-alert banner-success" role="status" {...feedbackSuccessBanner}>
             <div className="banner-icon-side">
               <IconCheckCircle size={20} className="icon-emerald" />
             </div>
@@ -971,9 +982,6 @@ export default function EventDetail() {
         {showSubtaskForm && (
           <div className="form-card-pro">
             <div className="form-card-header">
-              <div className="header-icon-box">
-                <IconPlus size={18} />
-              </div>
               <div>
                 <h2 className="form-heading">Nueva gestión</h2>
                 <p className="form-subheading">Registro de una gestión logística del evento</p>
@@ -1083,17 +1091,14 @@ export default function EventDetail() {
                   <label htmlFor="subtask-hours" className="field-label">
                     Horas estimadas <span className="req-star">*</span>
                   </label>
-                  <input
+                  <HoursInput
                     id="subtask-hours"
-                    type="number"
                     name="estimated_hours"
                     value={subtaskForm.estimated_hours}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
                     placeholder="Ej: 2.5"
-                    min="0"
-                    step="0.1"
-                    className={`field-input ${subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'field-input-error' : ''}`}
+                    className={subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'field-input-error' : ''}
                     required
                     aria-invalid={Boolean(subtaskTouched.estimated_hours && subtaskErrors.estimated_hours)}
                     aria-describedby={subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'subtask-hours-error' : undefined}
@@ -1263,17 +1268,14 @@ export default function EventDetail() {
                         <label htmlFor={`edit-${task.id}-hours`} className="field-label">
                           Horas estimadas <span className="req-star">*</span>
                         </label>
-                        <input
+                        <HoursInput
                           id={`edit-${task.id}-hours`}
-                          type="number"
                           name="estimated_hours"
                           value={editEntry.form.estimated_hours}
                           onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
                           onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
                           placeholder="Ej: 1.0"
-                          min="0.1"
-                          step="0.1"
-                          className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
+                          className={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}
                           required
                           aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
                           aria-describedby={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? `edit-${task.id}-estimated_hours-error` : undefined}

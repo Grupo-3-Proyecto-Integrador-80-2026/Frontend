@@ -15,6 +15,7 @@ import SortRuleHelp from '../components/SortRuleHelp'
 import StatusMessage from '../components/StatusMessage'
 import DateField from '../components/DateField'
 import DateWarning from '../components/DateWarning'
+import HoursInput from '../components/HoursInput'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
@@ -262,17 +263,14 @@ function TodayCard({
             <label htmlFor={`edit-today-${task.id}-hours`} className="field-label">
               Horas estimadas <span className="req-star">*</span>
             </label>
-            <input
+            <HoursInput
               id={`edit-today-${task.id}-hours`}
-              type="number"
               name="estimated_hours"
               value={editEntry.form.estimated_hours}
               onChange={(e) => onChangeEdit(task.id, task, e)}
               onBlur={(e) => onBlurEdit(task.id, task, e)}
               placeholder="Ej: 1.0"
-              min="0.1"
-              step="0.1"
-              className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
+              className={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}
               required
               aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
               aria-describedby={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? `edit-today-${task.id}-estimated_hours-error` : undefined}

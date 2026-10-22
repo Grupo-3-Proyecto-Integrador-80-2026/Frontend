@@ -6,6 +6,7 @@ import {
   IconX,
 } from './Icons'
 import DateField from './DateField'
+import HoursInput from './HoursInput'
 import { formatDateFromISO, todayISO } from '../utils/validators'
 import { apiFetch } from '../api/client'
 import useDialogFocus from './useDialogFocus'
@@ -45,8 +46,8 @@ export default function OverloadConflictModal({
 
   const defaultSuggestedHours =
     maxAllowedSameDay > 0
-      ? String(maxAllowedSameDay)
-      : String(Math.max(0.5, attemptedHours - 0.5))
+      ? String(Math.round(maxAllowedSameDay * 10) / 10)
+      : String(Math.round(Math.max(0.5, attemptedHours - 0.5) * 10) / 10)
 
   const [reducedHours, setReducedHours] = useState(defaultSuggestedHours)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -383,15 +384,11 @@ export default function OverloadConflictModal({
                   Ajustar horas estimadas para este día:
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
+                  <HoursInput
                     id="reduced-hours-input"
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    max={String(attemptedHours)}
+                    name="reduced_hours"
                     value={reducedHours}
                     onChange={(e) => setReducedHours(e.target.value)}
-                    className="field-input"
                     style={{ maxWidth: '110px' }}
                     disabled={isSubmitting}
                   />
