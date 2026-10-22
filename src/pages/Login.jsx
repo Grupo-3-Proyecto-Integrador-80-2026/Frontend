@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import PasswordField from '../components/PasswordField'
@@ -6,6 +6,9 @@ import { IconAlertTriangle, IconInfo, IconRefresh } from '../components/Icons'
 import { useAuth } from '../auth/AuthContext'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Pasado este tiempo se avisa que el servidor puede estar arrancando (Render en frío)
+const SLOW_NOTICE_MS = 5000
 
 function validate({ email, password }) {
   const errors = {}
@@ -24,6 +27,13 @@ export default function Login() {
   // 'credentials' | 'connection' | null: decide qué aviso mostrar y si se ofrece reintentar
   const [failure, setFailure] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSlow, setIsSlow] = useState(false)
+
+  useEffect(() => {
+    if (!isSubmitting) return undefined
+    const timerId = setTimeout(() => setIsSlow(true), SLOW_NOTICE_MS)
+    return () => clearTimeout(timerId)
+  }, [isSubmitting])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -37,12 +47,14 @@ export default function Login() {
     setFailure(null)
     if (Object.keys(formErrors).length > 0) return
 
+    setIsSlow(false)
     setIsSubmitting(true)
     try {
       // Al iniciar sesión, PublicOnlyRoute redirige a /hoy (o a la página que se pidió)
       await login(form.email.trim(), form.password)
     } catch (err) {
       setFailure(err.status === 401 || err.status === 400 ? 'credentials' : 'connection')
+      setIsSlow(false)
       setIsSubmitting(false)
     }
   }
@@ -94,7 +106,7 @@ export default function Login() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="auth-form">
+      <form onSubmit={handleSubmit} noValidate className="auth-form" aria-busy={isSubmitting}>
         <div className="field-group">
           <label htmlFor="login-email" className="field-label">
             Correo electrónico
@@ -110,6 +122,7 @@ export default function Login() {
             className={`field-input ${errors.email || credentialsError ? 'field-input-error' : ''}`}
             aria-invalid={Boolean(errors.email || credentialsError)}
             aria-describedby={errors.email ? 'login-email-error' : undefined}
+            disabled={isSubmitting}
           />
           {errors.email && (
             <span id="login-email-error" className="field-error-text">
@@ -128,11 +141,27 @@ export default function Login() {
           placeholder="Tu contraseña"
           error={errors.password}
           invalid={credentialsError}
+          disabled={isSubmitting}
         />
 
         <button type="submit" className="btn-submit-pro auth-submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Iniciando sesión...' : 'Iniciar sesión'}
+          {isSubmitting && (
+            <span className="loading-spinner loading-spinner-sm" aria-hidden="true" />
+          )}
+          <span>{isSubmitting ? 'Iniciando sesión...' : 'Iniciar sesión'}</span>
         </button>
+
+        {isSubmitting && (
+          <p
+            className={isSlow ? 'auth-slow-hint' : 'sr-only'}
+            role="status"
+            aria-live="polite"
+          >
+            {isSlow
+              ? 'Estamos activando el servidor. La primera carga puede tardar hasta un minuto.'
+              : 'Iniciando sesión...'}
+          </p>
+        )}
       </form>
     </AuthLayout>
   )

@@ -6,7 +6,15 @@ import { IconEye, IconEyeOff } from './Icons'
  * El botón es operable por teclado y anuncia su estado con aria-pressed.
  * `invalid` marca el campo en rojo sin mensaje propio (p. ej. credenciales inválidas).
  */
-export default function PasswordField({ id, label, error, hint, invalid = false, ...inputProps }) {
+export default function PasswordField({
+  id,
+  label,
+  error,
+  hint,
+  invalid = false,
+  disabled = false,
+  ...inputProps
+}) {
   const [visible, setVisible] = useState(false)
   const describedBy = [error && `${id}-error`, hint && `${id}-hint`].filter(Boolean).join(' ')
 
@@ -22,6 +30,7 @@ export default function PasswordField({ id, label, error, hint, invalid = false,
           className={`field-input password-input ${error || invalid ? 'field-input-error' : ''}`}
           aria-invalid={Boolean(error || invalid)}
           aria-describedby={describedBy || undefined}
+          disabled={disabled}
           {...inputProps}
         />
         <button
@@ -30,6 +39,7 @@ export default function PasswordField({ id, label, error, hint, invalid = false,
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           aria-pressed={visible}
+          disabled={disabled}
         >
           {visible ? <IconEyeOff size={18} /> : <IconEye size={18} />}
         </button>
