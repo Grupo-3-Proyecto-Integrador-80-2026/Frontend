@@ -17,6 +17,7 @@ import StatusMessage from '../components/StatusMessage'
 import DateWarning from '../components/DateWarning'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
+import ProgressBar from '../components/ProgressBar'
 import RescheduleButton from '../components/RescheduleButton'
 import SubtaskEditModal from '../components/SubtaskEditModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
@@ -29,6 +30,7 @@ import {
   todayISO,
   TASK_STATUSES,
 } from '../utils/validators'
+import { countByStatus, getDayOverload, overloadedDays } from '../utils/workload'
 import { useAuth } from '../auth/AuthContext'
 
 // Las hechas no aparecen en Hoy y las pospuestas ya tienen su propia columna:
@@ -112,6 +114,8 @@ function TodayCard({
   group,
   today,
   eventDate,
+  overloadHours,
+  dailyLimit,
   onStartEdit,
   onReschedule,
   onMarkDone,
@@ -166,6 +170,16 @@ function TodayCard({
 
       {afterEvent && <DateWarning eventDate={eventDate} />}
 
+      {overloadHours !== null && (
+        <p className="task-overload-warning" role="note">
+          <IconAlertTriangle size={16} />
+          <span>
+            Jornada sobrecargada: {hoursFormatter.format(overloadHours)} h de{' '}
+            {hoursFormatter.format(dailyLimit)} h
+          </span>
+        </p>
+      )}
+
       <div className="task-card-actions">
         <button
           type="button"
@@ -208,6 +222,8 @@ function TodayGroup({
   today,
   windowDays,
   eventDateById,
+  overloadByDate,
+  dailyLimit,
   onStartEdit,
   onReschedule,
   onMarkDone,
@@ -240,6 +256,8 @@ function TodayGroup({
               group={group}
               today={today}
               eventDate={eventDateById.get(task.event_id)}
+              overloadHours={getDayOverload(overloadByDate, task)}
+              dailyLimit={dailyLimit}
               onStartEdit={onStartEdit}
               onReschedule={onReschedule}
               onMarkDone={onMarkDone}
@@ -260,7 +278,7 @@ function describeDaysUntil(today, eventDate) {
   return `En ${days} días`
 }
 
-function TodaySummary({ data, events, dailyLimit }) {
+function TodaySummary({ data, events, dailyLimit, filteredEvent }) {
   const pendingHours = [...(data.overdue || []), ...(data.due_today || [])].reduce(
     (sum, task) => sum + Number(task.estimated_hours),
     0,
@@ -272,6 +290,9 @@ function TodaySummary({ data, events, dailyLimit }) {
     .filter((ev) => ev.event_date >= data.today)
     .sort((a, b) => a.event_date.localeCompare(b.event_date))
     .slice(0, 3)
+
+  const filteredBreakdown = filteredEvent ? countByStatus(filteredEvent.subtasks) : null
+  const filteredProgress = filteredEvent?.progress || { total: 0, executed: 0, percentage: 0 }
 
   return (
     <aside className="today-aside" aria-label="Resumen">
@@ -341,6 +362,22 @@ function TodaySummary({ data, events, dailyLimit }) {
           </ul>
         )}
       </section>
+
+      {filteredEvent && (
+        <section className="card-pro today-progress-card">
+          <div className="card-pro-header">
+            <h3>Progreso de preparación</h3>
+          </div>
+          <p className="today-progress-event">{filteredEvent.name}</p>
+          <ProgressBar
+            executed={filteredProgress.executed}
+            total={filteredProgress.total}
+            percentage={filteredProgress.percentage}
+            pending={filteredBreakdown.pending}
+            postponed={filteredBreakdown.postponed}
+          />
+        </section>
+      )}
     </aside>
   )
 }
@@ -391,10 +428,16 @@ export default function Today() {
   const loadToday = () => setAttempt((n) => n + 1)
 
   useEffect(() => {
-    apiFetch('/api/events/')
+    const controller = new AbortController()
+    apiFetch('/api/events/', { signal: controller.signal })
       .then((res) => setEvents(Array.isArray(res) ? res : []))
-      .catch(() => setEvents([]))
-  }, [])
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        // Se conserva la lista anterior: la vista sigue mostrando el último
+        // progreso y las advertencias conocidas si el refresco falla.
+      })
+    return () => controller.abort()
+  }, [attempt])
 
   const updateFilter = (name, value) => {
     const next = new URLSearchParams(searchParams)
@@ -411,6 +454,10 @@ export default function Today() {
     : 0
 
   const eventDateById = new Map(events.map((ev) => [ev.id, ev.event_date]))
+  const overloadByDate = overloadedDays(events, userDailyLimit, data?.today || todayISO())
+  const filteredEvent = eventFilter
+    ? events.find((ev) => String(ev.id) === eventFilter) || null
+    : null
 
   /**
    * Aviso de éxito con "Deshacer". `previousTask` es la gestión antes del cambio y
@@ -539,6 +586,8 @@ export default function Today() {
     eventDateById,
     today: data?.today,
     windowDays,
+    overloadByDate,
+    dailyLimit: userDailyLimit,
     onStartEdit: handleStartEditSubtask,
     onReschedule: handleReschedule,
     onMarkDone: handleMarkDone,
@@ -679,7 +728,12 @@ export default function Today() {
 
       <div className="today-layout">
         {data?.today && !error && (
-          <TodaySummary data={data} events={events} dailyLimit={userDailyLimit} />
+          <TodaySummary
+            data={data}
+            events={events}
+            dailyLimit={userDailyLimit}
+            filteredEvent={filteredEvent}
+          />
         )}
         <div className="today-main-column" aria-busy={isLoading} style={{ width: '100%' }}>
           {content}

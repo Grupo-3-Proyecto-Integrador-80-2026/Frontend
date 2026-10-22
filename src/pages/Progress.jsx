@@ -11,22 +11,53 @@ import ProgressBar from '../components/ProgressBar'
 import StatusMessage from '../components/StatusMessage'
 import LoadingOverlay from '../components/LoadingOverlay'
 import { apiFetch } from '../api/client'
+import { countByStatus, formatStatusBreakdown } from '../utils/workload'
+
+// Texto del pie; sin desglose (si falló /api/events/) se muestra un conteo
+// exacto de completadas en vez de llamar "pendientes" a las pospuestas.
+function footerText(item, breakdown) {
+  if (item.total === 0) return 'Sin gestiones registradas'
+  if (!breakdown) return `${item.executed} de ${item.total} completadas`
+  return formatStatusBreakdown(breakdown)
+}
 
 export default function Progress() {
   // Igual que en Hoy: cada intento tiene su clave y el estado se deriva de la
   // respuesta, así no hay setState síncrono dentro del efecto
   const [attempt, setAttempt] = useState(0)
-  const [result, setResult] = useState({ attempt: null, data: [], error: null })
+  const [result, setResult] = useState({
+    attempt: null,
+    data: [],
+    breakdownByEvent: new Map(),
+    error: null,
+  })
 
   useEffect(() => {
     const controller = new AbortController()
-    apiFetch('/api/progress/', { signal: controller.signal })
-      .then((data) => setResult({ attempt, data: Array.isArray(data) ? data : [], error: null }))
+    const progressRequest = apiFetch('/api/progress/', { signal: controller.signal })
+    // El desglose es complementario: si /api/events/ falla, el progreso se
+    // muestra igual sin desglose y sin error.
+    const eventsRequest = apiFetch('/api/events/', { signal: controller.signal }).catch((err) => {
+      if (err.name === 'AbortError') throw err
+      return null
+    })
+
+    Promise.all([progressRequest, eventsRequest])
+      .then(([data, events]) => {
+        const eventsList = Array.isArray(events) ? events : []
+        setResult({
+          attempt,
+          data: Array.isArray(data) ? data : [],
+          breakdownByEvent: new Map(eventsList.map((ev) => [ev.id, countByStatus(ev.subtasks)])),
+          error: null,
+        })
+      })
       .catch((err) => {
         if (err.name === 'AbortError') return
         setResult({
           attempt,
           data: [],
+          breakdownByEvent: new Map(),
           error: err.message || 'No pudimos consultar el progreso de tus eventos.',
         })
       })
@@ -34,7 +65,7 @@ export default function Progress() {
   }, [attempt])
 
   const loading = result.attempt !== attempt
-  const { data: eventsProgress, error } = result
+  const { data: eventsProgress, breakdownByEvent, error } = result
   const loadProgress = () => setAttempt((n) => n + 1)
 
   if (loading) {
@@ -84,43 +115,45 @@ export default function Progress() {
       </p>
 
       <div className="events-cards-grid">
-        {eventsProgress.map((item) => (
-          <div key={item.event_id} className="event-card-item">
-            <div className="event-card-top">
-              <span className="badge-preview-chip">
-                <IconBarChart size={13} style={{ marginRight: '4px' }} />
-                Avance logístico
-              </span>
+        {eventsProgress.map((item) => {
+          const breakdown = breakdownByEvent.get(item.event_id)
+
+          return (
+            <div key={item.event_id} className="event-card-item">
+              <div className="event-card-top">
+                <span className="badge-preview-chip">
+                  <IconBarChart size={13} style={{ marginRight: '4px' }} />
+                  Avance logístico
+                </span>
+              </div>
+
+              <h2 className="event-name" style={{ fontSize: '18px', marginTop: '6px' }}>
+                {item.event_name}
+              </h2>
+
+              <ProgressBar
+                executed={item.executed}
+                total={item.total}
+                percentage={item.percentage}
+                pending={breakdown?.pending}
+                postponed={breakdown?.postponed}
+              />
+
+              <div className="event-card-footer" style={{ marginTop: '16px' }}>
+                <span className="event-client progress-card-footer-text">
+                  {footerText(item, breakdown)}
+                </span>
+                <Link
+                  to={`/evento/${item.event_id}`}
+                  className="btn-manage-event"
+                  aria-label={`Ver detalle del evento ${item.event_name}`}
+                >
+                  Ver evento
+                </Link>
+              </div>
             </div>
-
-            <h2 className="event-name" style={{ fontSize: '18px', marginTop: '6px' }}>
-              {item.event_name}
-            </h2>
-
-            <ProgressBar
-              executed={item.executed}
-              total={item.total}
-              percentage={item.percentage}
-            />
-
-            <div className="event-card-footer" style={{ marginTop: '16px' }}>
-              <span className="event-client" style={{ fontSize: '12px' }}>
-                {item.total === 0
-                  ? 'Sin gestiones registradas'
-                  : item.percentage === 100
-                  ? '¡Todas las gestiones listas!'
-                  : `${item.total - item.executed} pendientes`}
-              </span>
-              <Link
-                to={`/evento/${item.event_id}`}
-                className="btn-manage-event"
-                aria-label={`Ver detalle del evento ${item.event_name}`}
-              >
-                Ver evento
-              </Link>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )

@@ -41,6 +41,8 @@ import {
   TASK_PRIORITIES,
   TASK_STATUSES,
 } from '../utils/validators'
+import { countByStatus, getDayOverload, overloadedDays } from '../utils/workload'
+import { useAuth } from '../auth/AuthContext'
 
 const INITIAL_EVENT_FORM_STATE = {
   name: '',
@@ -62,6 +64,8 @@ const INITIAL_SUBTASK_FORM_STATE = {
 }
 
 const EMPTY_FEEDBACK = { type: null, message: '', details: null, link: null }
+
+const hoursFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 })
 
 function buildEventFormValues(eventData) {
   return {
@@ -90,7 +94,14 @@ function subtasksProgressKey(subtasks) {
 export default function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const dailyLimit = user?.daily_hours_limit ?? 6
   const [event, setEvent] = useState(null)
+
+  // Todos los eventos del organizador: solo para calcular la carga real de cada
+  // día (la del evento actual no basta para detectar la sobrecarga).
+  const [workloadEvents, setWorkloadEvents] = useState([])
+  const [workloadAttempt, setWorkloadAttempt] = useState(0)
 
   const [conflictState, setConflictState] = useState(null)
   const [postponeState, setPostponeState] = useState(null)
@@ -151,7 +162,23 @@ export default function EventDetail() {
   const error = loadResult.error
   const fetchEvent = () => setAttempt((n) => n + 1)
 
+  // Refresco silencioso de la carga global: si falla no bloquea la vista ni
+  // muestra error; simplemente deja de marcar jornadas sobrecargadas.
+  useEffect(() => {
+    const controller = new AbortController()
+    apiFetch('/api/events/', { signal: controller.signal })
+      .then((res) => setWorkloadEvents(Array.isArray(res) ? res : []))
+      .catch((err) => {
+        if (err.name !== 'AbortError') setWorkloadEvents([])
+      })
+    return () => controller.abort()
+  }, [workloadAttempt])
+
+  const refreshWorkload = () => setWorkloadAttempt((n) => n + 1)
+
   const subtasks = Array.isArray(event?.subtasks) ? event.subtasks : []
+  const overloadByDate = overloadedDays(workloadEvents, dailyLimit)
+  const statusBreakdown = countByStatus(subtasks)
 
   // Progreso calculado por el backend (US-10, PI-149): el mismo número que en /progreso.
   // Llega con el evento y se vuelve a pedir cuando cambian las gestiones o sus estados.
@@ -174,7 +201,7 @@ export default function EventDetail() {
 
   const progressData =
     (fetchedProgress.eventId === id && fetchedProgress.data) ||
-    event?.progress || { total: 0, executed: 0, percentage: 0 }
+    event?.progress || { total: 0, executed: 0, percentage: 0, pending: 0, postponed: 0 }
 
   const newSubtaskDateRange = { eventDate: event?.event_date }
 
@@ -246,6 +273,7 @@ export default function EventDetail() {
       setSubtaskErrors({})
       setSubtaskTouched({})
       setShowSubtaskForm(false)
+      refreshWorkload()
     } catch (err) {
       if (err.status === 409 && err.details) {
         setConflictState({
@@ -287,6 +315,7 @@ export default function EventDetail() {
         details: data,
         link: { to: '/progreso', label: 'Ver progreso' },
       })
+      refreshWorkload()
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'No se pudo completar la gestión.' })
     }
@@ -311,6 +340,7 @@ export default function EventDetail() {
         message: `Gestión "${data.name}" reprogramada al ${formatDateFromISO(newDate)}.`,
         details: data,
       })
+      refreshWorkload()
     } catch (err) {
       if (err.status === 409 && err.details) {
         setConflictState({
@@ -346,6 +376,7 @@ export default function EventDetail() {
       message: `Gestión "${data.name}" pospuesta.`,
       details: data,
     })
+    refreshWorkload()
   }
 
   const handleStartEditEvent = () => {
@@ -452,6 +483,7 @@ export default function EventDetail() {
       message: `¡Gestión "${updatedTask.name}" actualizada con éxito!`,
       details: updatedTask,
     })
+    refreshWorkload()
   }
 
   const handleEditConflict = ({ task, form, pendingChanges, conflictData }) => {
@@ -506,6 +538,7 @@ export default function EventDetail() {
         message: `Gestión "${confirmDelete.name}" eliminada.`,
         details: null,
       })
+      refreshWorkload()
     } catch (err) {
       setConfirmDelete(null)
       const msg = err.message
@@ -848,6 +881,8 @@ export default function EventDetail() {
             executed={progressData.executed}
             total={progressData.total}
             percentage={progressData.percentage}
+            pending={statusBreakdown.pending}
+            postponed={statusBreakdown.postponed}
           />
         </div>
 
@@ -1071,6 +1106,7 @@ export default function EventDetail() {
               const afterEvent = isAfterEventDate(task, event.event_date)
               const isTaskDone = task.status === 'done'
               const isTaskPostponed = task.status === 'postponed'
+              const taskOverload = getDayOverload(overloadByDate, task)
 
               return (
                 <div key={task.id} className={`event-card-item ${afterEvent ? 'card-date-warning' : ''}`} style={{ position: 'relative' }}>
@@ -1149,6 +1185,16 @@ export default function EventDetail() {
                   </p>
 
                   {afterEvent && <DateWarning eventDate={event.event_date} />}
+
+                  {taskOverload !== null && (
+                    <p className="task-overload-warning" role="note">
+                      <IconAlertTriangle size={16} />
+                      <span>
+                        Jornada sobrecargada: {hoursFormatter.format(taskOverload)} h de{' '}
+                        {hoursFormatter.format(dailyLimit)} h
+                      </span>
+                    </p>
+                  )}
 
                   {/* Metadatos: Horas y Prioridad */}
                   <div className="event-details-list" style={{ marginTop: '8px' }}>
@@ -1280,6 +1326,7 @@ export default function EventDetail() {
               }))
             }
             setFeedback({ type: 'success', message, details: resultTask })
+            refreshWorkload()
           }}
           onCancel={() => {
             const state = conflictState
