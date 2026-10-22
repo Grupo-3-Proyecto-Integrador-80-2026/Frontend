@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
 import ProgressBar from '../components/ProgressBar'
+import SubtaskEditModal from '../components/SubtaskEditModal'
 import {
   IconMapPin,
   IconCalendar,
@@ -73,19 +74,6 @@ function buildEventFormValues(eventData) {
   }
 }
 
-function buildSubtaskFormValues(task) {
-  const hours = task.estimated_hours
-  return {
-    name: task.name || '',
-    type: task.type || '',
-    scheduled_date: task.scheduled_date || '',
-    estimated_hours: hours != null && hours !== '' ? String(hours) : '',
-    priority: task.priority || 'medium',
-    note: task.note || '',
-    status: task.status || 'pending',
-  }
-}
-
 /** Fecha programada más tardía entre las gestiones del evento (ISO), o null si no hay. */
 function latestSubtaskDate(subtasks) {
   return (Array.isArray(subtasks) ? subtasks : []).reduce(
@@ -123,7 +111,7 @@ export default function EventDetail() {
   const [isEventSubmitting, setIsEventSubmitting] = useState(false)
   const [eventFeedback, setEventFeedback] = useState(EMPTY_FEEDBACK)
 
-  const [editingSubtasks, setEditingSubtasks] = useState({})
+  const [editingTask, setEditingTask] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -188,10 +176,6 @@ export default function EventDetail() {
     event?.progress || { total: 0, executed: 0, percentage: 0 }
 
   const newSubtaskDateRange = { eventDate: event?.event_date }
-  const editDateRange = (subtaskId) => ({
-    eventDate: event?.event_date,
-    originalDate: event?.subtasks?.find((subtask) => subtask.id === subtaskId)?.scheduled_date,
-  })
 
   const handleChangeSubtask = (e) => {
     const { name, value } = e.target
@@ -415,147 +399,32 @@ export default function EventDetail() {
     }
   }
 
-  const updateEditingSubtask = (subtaskId, patch) => {
-    setEditingSubtasks((prev) =>
-      prev[subtaskId] ? { ...prev, [subtaskId]: { ...prev[subtaskId], ...patch } } : prev
-    )
-  }
+  const handleStartEditSubtask = (task) => setEditingTask({ task })
 
-  const handleStartEditSubtask = (task) => {
-    setEditingSubtasks((prev) => ({
+  const handleSavedSubtask = (task, updatedTask) => {
+    setEvent((prev) => ({
       ...prev,
-      [task.id]: {
-        form: buildSubtaskFormValues(task),
-        errors: {},
-        touched: {},
-        isSubmitting: false,
-        feedback: EMPTY_FEEDBACK,
-      },
+      subtasks: prev.subtasks.map((s) => (s.id === task.id ? updatedTask : s)),
     }))
-  }
-
-  const handleCancelEditSubtask = (subtaskId) => {
-    setEditingSubtasks((prev) => {
-      const next = { ...prev }
-      delete next[subtaskId]
-      return next
+    setEditingTask(null)
+    setFeedback({
+      type: 'success',
+      message: `¡Gestión "${updatedTask.name}" actualizada con éxito!`,
+      details: updatedTask,
     })
   }
 
-  const handleChangeSubtaskEdit = (subtaskId, e) => {
-    const { name, value } = e.target
-    setEditingSubtasks((prev) => {
-      const entry = prev[subtaskId]
-      if (!entry) return prev
-      const nextEntry = { ...entry, form: { ...entry.form, [name]: value } }
-
-      if (entry.touched[name] || entry.errors[name]) {
-        nextEntry.errors = {
-          ...entry.errors,
-          [name]: validateSubtaskField(name, value, editDateRange(subtaskId)),
-        }
-      }
-      return { ...prev, [subtaskId]: nextEntry }
+  const handleEditConflict = ({ task, form, pendingChanges, conflictData }) => {
+    setEditingTask(null)
+    setConflictState({
+      subtask: { ...task, ...form, id: task.id },
+      original: task,
+      pendingChanges,
+      savedHours: task.estimated_hours ?? null,
+      conflictData,
+      eventDate: event.event_date,
+      initialForm: form,
     })
-  }
-
-  const handleBlurSubtaskEdit = (subtaskId, e) => {
-    const { name, value } = e.target
-    setEditingSubtasks((prev) => {
-      const entry = prev[subtaskId]
-      if (!entry) return prev
-      return {
-        ...prev,
-        [subtaskId]: {
-          ...entry,
-          touched: { ...entry.touched, [name]: true },
-          errors: { ...entry.errors, [name]: validateSubtaskField(name, value, editDateRange(subtaskId)) },
-        },
-      }
-    })
-  }
-
-  const handleSubmitSubtaskEdit = async (subtaskId, e) => {
-    e.preventDefault()
-    const entry = editingSubtasks[subtaskId]
-    if (!entry) return
-
-    const allTouched = Object.keys(entry.form).reduce((acc, key) => {
-      acc[key] = true
-      return acc
-    }, {})
-
-    const formErrors = validateSubtaskForm(entry.form, editDateRange(subtaskId))
-    const hasErrors = Object.keys(formErrors).length > 0
-
-    setEditingSubtasks((prev) => {
-      const current = prev[subtaskId]
-      if (!current) return prev
-      return {
-        ...prev,
-        [subtaskId]: {
-          ...current,
-          touched: allTouched,
-          errors: formErrors,
-          feedback: hasErrors
-            ? {
-                type: 'error',
-                message: 'Por favor, corrige los errores en los campos requeridos antes de guardar.',
-                details: null,
-              }
-            : EMPTY_FEEDBACK,
-        },
-      }
-    })
-
-    if (hasErrors) return
-
-    updateEditingSubtask(subtaskId, { isSubmitting: true })
-
-    const payload = {
-      name: entry.form.name.trim(),
-      type: entry.form.type,
-      scheduled_date: entry.form.scheduled_date,
-      estimated_hours: Number(entry.form.estimated_hours),
-      priority: entry.form.priority,
-      note: entry.form.note.trim(),
-      status: entry.form.status,
-    }
-
-    try {
-      const data = await apiFetch(`/api/subtasks/${subtaskId}/`, { method: 'PATCH', body: payload })
-      setEvent((prev) => ({
-        ...prev,
-        subtasks: prev.subtasks.map((s) => (s.id === subtaskId ? data : s)),
-      }))
-      handleCancelEditSubtask(subtaskId)
-      setFeedback({
-        type: 'success',
-        message: `¡Gestión "${data.name}" actualizada con éxito!`,
-        details: data,
-      })
-    } catch (err) {
-      if (err.status === 409 && err.details) {
-        const savedSubtask = event?.subtasks?.find((s) => s.id === subtaskId) || {}
-        // El modal resuelve fecha y horas; el resto de lo editado viaja con la resolución
-        const pendingChanges = { ...payload }
-        delete pendingChanges.scheduled_date
-        delete pendingChanges.estimated_hours
-        setConflictState({
-          subtask: { ...savedSubtask, ...entry.form, id: subtaskId },
-          pendingChanges,
-          savedHours: savedSubtask.estimated_hours ?? null,
-          conflictData: err.details,
-          eventDate: event.event_date,
-        })
-      } else {
-        updateEditingSubtask(subtaskId, {
-          feedback: { type: 'error', message: err.message, details: null },
-        })
-      }
-    } finally {
-      updateEditingSubtask(subtaskId, { isSubmitting: false })
-    }
   }
 
   const handleRequestDeleteEvent = () => {
@@ -1152,215 +1021,6 @@ export default function EventDetail() {
         ) : (
           <div className="events-cards-grid">
             {subtasks.map((task) => {
-              const editEntry = editingSubtasks[task.id]
-
-              if (editEntry) {
-                return (
-                  <div key={task.id} className="event-card-item">
-                    {/* Cabecera: Insignia "Editando gestión" a la izquierda y fecha objetivo a la derecha */}
-                    <div
-                      className="event-card-top"
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}
-                    >
-                      <span className="event-status-badge">Editando gestión</span>
-                      {editEntry.form.scheduled_date && (
-                        <span
-                          className="event-date"
-                          style={{ fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <IconCalendar size={14} />
-                          <span>{formatDateFromISO(editEntry.form.scheduled_date)}</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Alerta de error si falla la validación al guardar */}
-                    {editEntry.feedback?.type === 'error' && (
-                      <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '14px' }}>
-                        <IconAlertTriangle size={16} className="icon-rose" />
-                        <span style={{ fontSize: '12.5px' }}>{editEntry.feedback.message}</span>
-                      </div>
-                    )}
-
-                    <form
-                      className="event-edit-form"
-                      onSubmit={(e) => handleSubmitSubtaskEdit(task.id, e)}
-                      noValidate
-                    >
-                      {/* 1. Nombre de la gestión con contador */}
-                      <div className="field-group">
-                        <div className="field-label-row">
-                          <label htmlFor={`edit-${task.id}-name`} className="field-label">
-                            Nombre de la gestión <span className="req-star">*</span>
-                          </label>
-                          <span className="char-counter">{editEntry.form.name.length}/200</span>
-                        </div>
-                        <input
-                          id={`edit-${task.id}-name`}
-                          type="text"
-                          name="name"
-                          value={editEntry.form.name}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input ${editEntry.touched.name && editEntry.errors.name ? 'field-input-error' : ''}`}
-                          placeholder="Ej: Confirmar asistentes"
-                          required
-                          maxLength={200}
-                          aria-invalid={editEntry.touched.name && !!editEntry.errors.name}
-                          aria-describedby={editEntry.touched.name && editEntry.errors.name ? `edit-${task.id}-name-error` : undefined}
-                        />
-                        {editEntry.touched.name && editEntry.errors.name && (
-                          <span id={`edit-${task.id}-name-error`} className="field-error-text">{editEntry.errors.name}</span>
-                        )}
-                      </div>
-
-                      {/* 2. Tipo de gestión */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-type`} className="field-label">
-                          Tipo de gestión <span className="req-star">*</span>
-                        </label>
-                        <select
-                          id={`edit-${task.id}-type`}
-                          name="type"
-                          value={editEntry.form.type}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input field-select ${editEntry.touched.type && editEntry.errors.type ? 'field-input-error' : ''}`}
-                          required
-                          aria-invalid={editEntry.touched.type && !!editEntry.errors.type}
-                          aria-describedby={editEntry.touched.type && editEntry.errors.type ? `edit-${task.id}-type-error` : undefined}
-                        >
-                          <option value="" disabled>Selecciona un tipo</option>
-                          {TASK_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                        {editEntry.touched.type && editEntry.errors.type && (
-                          <span id={`edit-${task.id}-type-error`} className="field-error-text">{editEntry.errors.type}</span>
-                        )}
-                      </div>
-
-                      {/* 3. Fecha objetivo */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-date`} className="field-label">
-                          Fecha objetivo <span className="req-star">*</span>
-                        </label>
-                        <DateField
-                          id={`edit-${task.id}-date`}
-                          name="scheduled_date"
-                          value={editEntry.form.scheduled_date}
-                          min={task.scheduled_date < todayISO() ? task.scheduled_date : todayISO()}
-                          max={event.event_date}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
-                          required
-                          aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
-                          aria-describedby={editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? `edit-${task.id}-scheduled_date-error` : undefined}
-                        />
-                        {editEntry.touched.scheduled_date && editEntry.errors.scheduled_date && (
-                          <span id={`edit-${task.id}-scheduled_date-error`} className="field-error-text">{editEntry.errors.scheduled_date}</span>
-                        )}
-                      </div>
-
-                      {/* 4. Horas estimadas */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-hours`} className="field-label">
-                          Horas estimadas <span className="req-star">*</span>
-                        </label>
-                        <HoursInput
-                          id={`edit-${task.id}-hours`}
-                          name="estimated_hours"
-                          value={editEntry.form.estimated_hours}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          placeholder="Ej: 1.0"
-                          className={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}
-                          required
-                          aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
-                          aria-describedby={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? `edit-${task.id}-estimated_hours-error` : undefined}
-                        />
-                        {editEntry.touched.estimated_hours && editEntry.errors.estimated_hours && (
-                          <span id={`edit-${task.id}-estimated_hours-error`} className="field-error-text">{editEntry.errors.estimated_hours}</span>
-                        )}
-                      </div>
-
-                      {/* 5. Prioridad */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-priority`} className="field-label">
-                          Prioridad
-                        </label>
-                        <select
-                          id={`edit-${task.id}-priority`}
-                          name="priority"
-                          value={editEntry.form.priority}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          className="field-input field-select"
-                        >
-                          {TASK_PRIORITIES.map((p) => (
-                            <option key={p.value} value={p.value}>{p.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* 6. Estado */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-status`} className="field-label">
-                          Estado
-                        </label>
-                        <select
-                          id={`edit-${task.id}-status`}
-                          name="status"
-                          value={editEntry.form.status}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          className="field-input field-select"
-                        >
-                          {TASK_STATUSES.map((st) => (
-                            <option key={st.value} value={st.value}>{st.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* 7. Nota */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-note`} className="field-label">
-                          Nota
-                        </label>
-                        <textarea
-                          id={`edit-${task.id}-note`}
-                          name="note"
-                          value={editEntry.form.note}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          placeholder="Indicaciones adicionales para esta gestión..."
-                          rows="3"
-                          className="field-input field-textarea"
-                        />
-                      </div>
-
-                      {/* 8. Botones de acción */}
-                      <div className="form-actions-row" style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button
-                          type="button"
-                          className="btn-sec-pro"
-                          onClick={() => handleCancelEditSubtask(task.id)}
-                          disabled={editEntry.isSubmitting}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="submit"
-                          className="btn-submit-pro"
-                          disabled={editEntry.isSubmitting}
-                        >
-                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar cambios'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                )
-              }
-
-
               const afterEvent = isAfterEventDate(task, event.event_date)
               const isTaskDone = task.status === 'done'
               const isTaskPostponed = task.status === 'postponed'
@@ -1529,6 +1189,18 @@ export default function EventDetail() {
         onCancel={handleCancelDelete}
       />
 
+      {editingTask && (
+        <SubtaskEditModal
+          key={editingTask.task.id}
+          task={editingTask.task}
+          eventDate={event.event_date}
+          initialForm={editingTask.initialForm}
+          onSaved={(updatedTask) => handleSavedSubtask(editingTask.task, updatedTask)}
+          onConflict={handleEditConflict}
+          onCancel={() => setEditingTask(null)}
+        />
+      )}
+
       {conflictState && (
         <OverloadConflictModal
           conflictData={conflictState?.conflictData}
@@ -1540,6 +1212,7 @@ export default function EventDetail() {
           onResolved={(resultTask, message) => {
             const wasNew = conflictState?.isNew
             setConflictState(null)
+            setEditingTask(null)
             if (wasNew) {
               setEvent((prev) => ({
                 ...prev,
@@ -1552,11 +1225,16 @@ export default function EventDetail() {
                 ...prev,
                 subtasks: prev.subtasks.map((s) => (s.id === resultTask.id ? resultTask : s)),
               }))
-              handleCancelEditSubtask(resultTask.id)
             }
             setFeedback({ type: 'success', message, details: resultTask })
           }}
-          onCancel={() => setConflictState(null)}
+          onCancel={() => {
+            const state = conflictState
+            setConflictState(null)
+            if (!state?.isNew && state?.initialForm && state?.original) {
+              setEditingTask({ task: state.original, initialForm: state.initialForm })
+            }
+          }}
         />
       )}
 

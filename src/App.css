@@ -715,12 +715,6 @@ textarea {
   color: var(--slate-600);
 }
 
-.event-edit-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
 /* ==========================================================================
    Team Section
    ========================================================================== */
@@ -1236,6 +1230,87 @@ textarea {
 
 .confirm-dialog .btn-danger-pro:focus-visible {
   outline-color: var(--rose-500);
+}
+
+/* ==========================================================================
+   Modal de edición de gestiones (SubtaskEditModal)
+   ========================================================================== */
+.subtask-edit-dialog {
+  max-width: 560px;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  align-items: stretch;
+  text-align: left;
+  gap: 0.85rem;
+}
+
+.subtask-edit-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.subtask-edit-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.subtask-edit-heading .confirm-dialog-title {
+  margin: 0;
+}
+
+.subtask-edit-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: var(--text-sm);
+  color: var(--slate-600);
+  overflow-wrap: anywhere;
+}
+
+.subtask-edit-close {
+  padding: 0.35rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.subtask-edit-feedback {
+  width: 100%;
+}
+
+.subtask-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.subtask-edit-form .field-row-2 > * {
+  min-width: 0;
+}
+
+.subtask-edit-actions {
+  flex-wrap: wrap;
+}
+
+.subtask-edit-actions .btn-sec-pro,
+.subtask-edit-actions .btn-submit-pro {
+  white-space: normal;
+}
+
+@media (max-width: 520px) {
+  .subtask-edit-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .subtask-edit-actions .btn-submit-pro {
+    order: -1;
+    width: 100%;
+  }
+
+  .subtask-edit-actions .btn-sec-pro {
+    width: 100%;
+  }
 }
 
 /* ==========================================================================
