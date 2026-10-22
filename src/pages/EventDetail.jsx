@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
 import ProgressBar from '../components/ProgressBar'
+import RescheduleButton from '../components/RescheduleButton'
 import SubtaskEditModal from '../components/SubtaskEditModal'
 import {
   IconMapPin,
@@ -60,7 +61,7 @@ const INITIAL_SUBTASK_FORM_STATE = {
   note: '',
 }
 
-const EMPTY_FEEDBACK = { type: null, message: '', details: null }
+const EMPTY_FEEDBACK = { type: null, message: '', details: null, link: null }
 
 function buildEventFormValues(eventData) {
   return {
@@ -284,9 +285,48 @@ export default function EventDetail() {
         type: 'success',
         message: `Gestión "${data.name}" completada exitosamente.`,
         details: data,
+        link: { to: '/progreso', label: 'Ver progreso' },
       })
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'No se pudo completar la gestión.' })
+    }
+  }
+
+  // Reprogramar solo cambia la fecha objetivo: una gestión pospuesta se reactiva
+  // en el backend y la tarjeta se actualiza con la respuesta, sin refetch.
+  const handleReschedule = async (task, newDate) => {
+    if (!newDate || newDate === task.scheduled_date) return
+
+    try {
+      const data = await apiFetch(`/api/subtasks/${task.id}/`, {
+        method: 'PATCH',
+        body: { scheduled_date: newDate },
+      })
+      setEvent((prev) => ({
+        ...prev,
+        subtasks: prev.subtasks.map((s) => (s.id === task.id ? data : s)),
+      }))
+      setFeedback({
+        type: 'success',
+        message: `Gestión "${data.name}" reprogramada al ${formatDateFromISO(newDate)}.`,
+        details: data,
+      })
+    } catch (err) {
+      if (err.status === 409 && err.details) {
+        setConflictState({
+          subtask: task,
+          original: task,
+          conflictData: err.details,
+          eventDate: event.event_date,
+          isNew: false,
+          savedHours: task.estimated_hours ?? null,
+        })
+      } else {
+        setFeedback({
+          type: 'error',
+          message: err.message || 'No se pudo reprogramar la gestión.',
+        })
+      }
     }
   }
 
@@ -818,6 +858,13 @@ export default function EventDetail() {
             </div>
             <div className="banner-content">
               <strong>{feedback.message}</strong>
+              {feedback.link && (
+                <div className="banner-actions">
+                  <Link to={feedback.link.to} className="btn-alert-outline btn-small">
+                    {feedback.link.label}
+                  </Link>
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -1121,37 +1168,36 @@ export default function EventDetail() {
                     </p>
                   )}
 
-                  {/* Botones inferiores limpios y simétricos (Hecha / Posponer) */}
-                  <div className="event-card-footer" style={{ marginTop: '16px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                    <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
+                  {/* Acciones de la tarjeta: Hecha, Reprogramar y Posponer */}
+                  <div className="event-card-footer">
+                    <div className="task-card-actions">
                       <button
                         type="button"
-                        className="btn-submit-pro"
-                        style={{
-                          flex: 1,
-                          padding: '6px 12px',
-                          fontSize: '13px',
-                          justifyContent: 'center',
-                          opacity: isTaskDone ? 0.6 : 1,
-                        }}
+                        className="btn-submit-pro btn-small"
                         onClick={() => handleMarkDone(task)}
                         disabled={isTaskDone}
                         title={isTaskDone ? 'Gestión ya completada' : 'Marcar gestión como hecha'}
+                        aria-label={
+                          isTaskDone
+                            ? `Gestión ${task.name} ya completada`
+                            : `Marcar gestión ${task.name} como hecha`
+                        }
                       >
-                        <IconCheckCircle size={14} style={{ marginRight: '6px' }} />
+                        <IconCheckCircle size={14} />
                         {isTaskDone ? 'Completada' : 'Hecha'}
                       </button>
 
+                      <RescheduleButton
+                        task={task}
+                        min={todayISO()}
+                        max={event.event_date}
+                        onChange={(newDate) => handleReschedule(task, newDate)}
+                        disabled={isTaskDone}
+                      />
+
                       <button
                         type="button"
-                        className="btn-sec-pro"
-                        style={{
-                          flex: 1,
-                          padding: '6px 12px',
-                          fontSize: '13px',
-                          justifyContent: 'center',
-                          opacity: (isTaskDone || isTaskPostponed) ? 0.6 : 1,
-                        }}
+                        className="btn-sec-pro btn-small"
                         onClick={() => setPostponeState(task)}
                         disabled={isTaskDone || isTaskPostponed}
                         title={
@@ -1160,6 +1206,13 @@ export default function EventDetail() {
                             : isTaskPostponed
                             ? 'Ya se encuentra pospuesta'
                             : 'Posponer gestión con nota explicativa'
+                        }
+                        aria-label={
+                          isTaskDone
+                            ? `No se puede posponer la gestión ${task.name} porque está completada`
+                            : isTaskPostponed
+                            ? `Gestión ${task.name} ya pospuesta`
+                            : `Posponer gestión ${task.name}`
                         }
                       >
                         {isTaskPostponed ? 'Pospuesta' : 'Posponer'}

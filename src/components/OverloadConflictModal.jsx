@@ -125,9 +125,25 @@ export default function OverloadConflictModal({
         body: payload,
       })
     } else {
+      const changes = { ...pendingChanges, ...body }
+      const dateChanged = Boolean(
+        body.scheduled_date && body.scheduled_date !== subtask?.scheduled_date
+      )
+
+      // Una pospuesta que cambia de fecha debe reactivarse: no se hereda el
+      // estado "postponed" del formulario si el usuario no eligió otro estado.
+      if (
+        dateChanged &&
+        subtask?.status === 'postponed' &&
+        changes.status === 'postponed' &&
+        !Object.prototype.hasOwnProperty.call(body, 'status')
+      ) {
+        delete changes.status
+      }
+
       return await apiFetch(`/api/subtasks/${subtask.id}/`, {
         method: 'PATCH',
-        body: { ...pendingChanges, ...body },
+        body: changes,
       })
     }
   }

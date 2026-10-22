@@ -17,6 +17,7 @@ import StatusMessage from '../components/StatusMessage'
 import DateWarning from '../components/DateWarning'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
+import RescheduleButton from '../components/RescheduleButton'
 import SubtaskEditModal from '../components/SubtaskEditModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
 import { apiFetch, CONNECTION_ERROR_MESSAGE } from '../api/client'
@@ -119,17 +120,6 @@ function TodayCard({
   const relative = describeRelativeDate(group.key, task.scheduled_date, today)
   const hours = hoursFormatter.format(Number(task.estimated_hours))
   const afterEvent = isAfterEventDate(task, eventDate)
-  const dateInputRef = useRef(null)
-
-  const triggerPicker = () => {
-    if (!dateInputRef.current) return
-    try {
-      dateInputRef.current.showPicker()
-    } catch {
-      dateInputRef.current.focus()
-      dateInputRef.current.click()
-    }
-  }
 
   return (
     <li className={`today-card today-card-${group.key} ${afterEvent ? 'card-date-warning' : ''}`}>
@@ -153,40 +143,13 @@ function TodayCard({
       </Link>
 
       <div className="today-card-meta">
-        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-          <button
-            type="button"
-            className="today-meta-item today-date-btn"
-            onClick={triggerPicker}
-            title="Haz clic para reprogramar fecha"
-            aria-label={`Fecha actual: ${formatDateFromISO(task.scheduled_date)}. Haz clic para cambiarla`}
-          >
-            <IconCalendar size={14} />
-            <span>
-              {formatDateFromISO(task.scheduled_date)}
-              {relative && <span className="today-meta-relative"> · {relative}</span>}
-            </span>
-          </button>
-          <input
-            ref={dateInputRef}
-            type="date"
-            value={task.scheduled_date}
-            min={today || todayISO()}
-            max={eventDate || undefined}
-            onChange={(e) => onReschedule(task, e.target.value)}
-            style={{
-              position: 'absolute',
-              opacity: 0,
-              pointerEvents: 'none',
-              width: '1px',
-              height: '1px',
-              bottom: 0,
-              left: 0,
-            }}
-            tabIndex={-1}
-            aria-hidden="true"
-          />
-        </div>
+        <span className="today-meta-item">
+          <IconCalendar size={14} />
+          <span>
+            {formatDateFromISO(task.scheduled_date)}
+            {relative && <span className="today-meta-relative"> · {relative}</span>}
+          </span>
+        </span>
 
         <span className="today-meta-item">
           <IconClock size={14} />
@@ -203,25 +166,32 @@ function TodayCard({
 
       {afterEvent && <DateWarning eventDate={eventDate} />}
 
-      <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+      <div className="task-card-actions">
         <button
           type="button"
           className="btn-submit-pro btn-small"
-          style={{ padding: '4px 10px', fontSize: '12px' }}
           onClick={() => onMarkDone(task)}
-          title="Marcar como hecha"
+          title="Marcar gestión como hecha"
+          aria-label={`Marcar gestión ${task.name} como hecha`}
         >
-          <IconCheckCircle size={14} style={{ marginRight: '4px' }} />
+          <IconCheckCircle size={14} />
           Hecha
         </button>
+
+        <RescheduleButton
+          task={task}
+          min={today || todayISO()}
+          max={eventDate}
+          onChange={(newDate) => onReschedule(task, newDate)}
+        />
 
         {task.status !== 'postponed' && (
           <button
             type="button"
             className="btn-sec-pro btn-small"
-            style={{ padding: '4px 10px', fontSize: '12px' }}
             onClick={() => onRequestPostpone(task)}
             title="Posponer gestión con nota explicativa"
+            aria-label={`Posponer gestión ${task.name}`}
           >
             Posponer
           </button>
@@ -448,7 +418,7 @@ export default function Today() {
    * Si el cambio movió la gestión desde una fecha que ya pasó, no se ofrece
    * Deshacer: el backend no permite volver a programar en el pasado.
    */
-  const showUndoToast = (previousTask, updatedTask, message) => {
+  const showUndoToast = (previousTask, updatedTask, message, extra = {}) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setToast(null), UNDO_TOAST_MS)
 
@@ -460,6 +430,7 @@ export default function Today() {
     setToast({
       type: 'success',
       message,
+      link: extra.link || null,
       subtaskId: previousTask.id,
       undoChanges: canUndo ? undoChanges : null,
     })
@@ -545,7 +516,9 @@ export default function Today() {
         body: { status: 'done' },
       })
       loadToday()
-      showUndoToast(task, updated, `¡Gestión "${task.name}" completada!`)
+      showUndoToast(task, updated, `¡Gestión "${task.name}" completada!`, {
+        link: { to: '/progreso', label: 'Ver progreso' },
+      })
     } catch (err) {
       showErrorToast(`No pudimos marcar "${task.name}" como hecha`, err)
     }
@@ -715,43 +688,36 @@ export default function Today() {
 
       {toast && (
         <div
-          className={`banner-alert ${toast.type === 'error' ? 'banner-error' : 'banner-success'}`}
+          className={`banner-alert today-toast ${toast.type === 'error' ? 'banner-error' : 'banner-success'}`}
           role={toast.type === 'error' ? 'alert' : 'status'}
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 9999,
-            maxWidth: 'min(440px, calc(100vw - 48px))',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          }}
         >
           {toast.type === 'error' ? (
             <IconAlertTriangle size={18} className="icon-rose" />
           ) : (
             <IconCheckCircle size={18} className="icon-emerald" />
           )}
-          <span>{toast.message}</span>
-          {toast.undoChanges ? (
-            <button
-              type="button"
-              className="btn-sec-pro btn-small"
-              onClick={handleUndo}
-              style={{ marginLeft: '8px' }}
-            >
-              Deshacer
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn-sec-pro btn-small"
-              onClick={closeToast}
-              aria-label="Cerrar mensaje"
-              style={{ marginLeft: '8px' }}
-            >
-              <IconX size={14} />
-            </button>
-          )}
+          <span className="today-toast-message">{toast.message}</span>
+          <div className="today-toast-actions">
+            {toast.link && (
+              <Link to={toast.link.to} className="btn-sec-pro btn-small" onClick={closeToast}>
+                {toast.link.label}
+              </Link>
+            )}
+            {toast.undoChanges ? (
+              <button type="button" className="btn-sec-pro btn-small" onClick={handleUndo}>
+                Deshacer
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-sec-pro btn-small"
+                onClick={closeToast}
+                aria-label="Cerrar mensaje"
+              >
+                <IconX size={14} />
+              </button>
+            )}
+          </div>
         </div>
       )}
 

@@ -709,6 +709,47 @@ textarea {
   flex: 1;
 }
 
+/* Acciones de una tarjeta de gestión: se envuelven sin desbordar en pantallas angostas */
+.task-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+.task-card-actions > * {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+.task-card-actions .btn-small,
+.task-card-actions .reschedule-button {
+  width: 100%;
+  white-space: normal;
+}
+
+.event-card-footer .task-card-actions {
+  margin-top: 0;
+}
+
+/* Reprogramar: botón visible + input de fecha nativo oculto */
+.reschedule-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.reschedule-native {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+}
+
 .detail-desc-text {
   margin: 0;
   white-space: pre-line;
@@ -1834,28 +1875,6 @@ textarea {
   background-color: var(--slate-100);
 }
 
-/* La fecha abre el calendario para reprogramar: se ve como botón al pasar o enfocar */
-.today-date-btn {
-  margin: -2px -6px;
-  padding: 2px 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-decoration: underline dotted var(--slate-400);
-  text-underline-offset: 3px;
-  transition: background-color 0.15s, color 0.15s;
-}
-
-.today-date-btn:hover,
-.today-date-btn:focus-visible {
-  background-color: var(--brand-50);
-  color: var(--brand-700);
-  text-decoration-color: currentColor;
-}
-
 .today-card-event {
   align-self: flex-start;
   font-size: var(--text-base);
@@ -1895,6 +1914,38 @@ textarea {
   color: var(--slate-700);
   font-size: var(--text-xs);
   font-weight: 700;
+}
+
+/* Aviso flotante de /hoy: envuelve mensaje y acciones en pantallas pequeñas */
+.today-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  max-width: min(440px, calc(100vw - 48px));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  flex-wrap: wrap;
+}
+
+.today-toast-message {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.today-toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+@media (max-width: 520px) {
+  .today-toast {
+    bottom: 16px;
+    right: 16px;
+    max-width: calc(100vw - 32px);
+  }
 }
 
 @media (max-width: 640px) {
