@@ -9,6 +9,7 @@ import { formatDateFromISO } from '../utils/validators'
 export default function DateField({
   id,
   name,
+  label,
   value,
   min,
   max,
@@ -64,6 +65,7 @@ export default function DateField({
         aria-describedby={[ariaDescribedBy, hintId].filter(Boolean).join(' ')}
         aria-haspopup="dialog"
         autoComplete="off"
+        aria-label={label}
       />
       <IconCalendar size={16} className="date-field-icon" />
       <span id={hintId} className="sr-only">
@@ -81,6 +83,7 @@ export default function DateField({
         className="date-field-native"
         tabIndex={-1}
         aria-hidden="true"
+        aria-label={label}
       />
     </div>
   )

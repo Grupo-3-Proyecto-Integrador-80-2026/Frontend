@@ -900,6 +900,7 @@ textarea {
   font-size: var(--text-sm);
   color: var(--slate-500);
   margin: 0.1rem 0 0;
+  opacity: 1;
 }
 
 .form-body-pro {
@@ -1152,7 +1153,12 @@ textarea {
 }
 
 .muted {
-  color: var(--slate-500);
+  color: #64748b;
+  font-style: italic;
+}
+
+.preview-card-pro .muted {
+  color: #334155;
   font-style: italic;
 }
 
@@ -1832,15 +1838,15 @@ textarea {
 
 /* Colores de fondo según la columna */
 .today-group-overdue .today-group-count {
-  background-color: #ef4444; /* Rojo */
+  background-color: #b91c1c;
 }
 
 .today-group-due_today .today-group-count {
-  background-color: #d97706; /* Ámbar / Naranja */
+  background-color: #92400e;
 }
 
 .today-group-upcoming .today-group-count {
-  background-color: #3b82f6; /* Azul */
+  background-color: #1d4ed8;
 }
 
 .today-group-empty {
