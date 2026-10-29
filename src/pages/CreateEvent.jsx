@@ -479,6 +479,7 @@ useEffect(() => {
                   id="event_date"
                   name="event_date"
                   value={formData.event_date}
+                  label="Fecha del evento"
                   min={todayISO()}
                   onChange={handleChange}
                   onBlur={handleBlur}
@@ -670,11 +671,12 @@ useEffect(() => {
                   <div className="field-row-2">
                     <div className="field-group">
                       <label htmlFor={`plan-${row.key}-date`} className="field-label">
-                        Fecha objetivo <span className="req-star">*</span>
+                        Fecha de realización de la gestión <span className="req-star">*</span>
                       </label>
                       <DateField
                         id={`plan-${row.key}-date`}
                         name="scheduled_date"
+                        label={`Fecha de realización de la gestión ${index + 1}`}
                         value={row.values.scheduled_date}
                         min={todayISO()}
                         max={formData.event_date || undefined}

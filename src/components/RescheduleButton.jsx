@@ -49,7 +49,7 @@ export default function RescheduleButton({ task, min, max, onChange, disabled = 
         disabled={disabled}
         onChange={handleChange}
         tabIndex={-1}
-        aria-hidden="true"
+        aria-label={`Nueva fecha para reprogramar la gestión ${task.name}`}
       />
     </span>
   )
