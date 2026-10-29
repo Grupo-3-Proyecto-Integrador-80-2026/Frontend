@@ -5,12 +5,15 @@ import {
   IconCheckCircle,
   IconAlertTriangle,
   IconCalendar,
+  IconClock,
   IconUser,
   IconMapPin,
   IconX,
 } from '../components/Icons'
 import DateField from '../components/DateField'
+import HoursInput from '../components/HoursInput'
 import OverloadConflictModal from '../components/OverloadConflictModal'
+import useAutoDismiss from '../components/useAutoDismiss'
 import { apiFetch } from '../api/client'
 import {
   validateEventField,
@@ -30,6 +33,7 @@ const INITIAL_FORM_STATE = {
   contact: '',
   location: '',
   event_date: '',
+  event_time: '',
   status: 'planning',
   description: '',
 }
@@ -88,6 +92,11 @@ export default function CreateEvent() {
   const nextRowKey = useRef(1)
 
   const bannerRef = useRef(null)
+
+  const successBanner = useAutoDismiss(() => setFeedback(EMPTY_FEEDBACK), {
+    active: feedback.type === 'success',
+    resetKey: feedback.message,
+  })
 
 useEffect(() => {
   if (!feedback.type) return
@@ -191,6 +200,8 @@ useEffect(() => {
     // Marcar todos los campos como tocados al intentar enviar
     setTouched(Object.fromEntries(Object.keys(formData).map((key) => [key, true])))
     const formErrors = validateEventForm(formData)
+    const timeError = validateEventField('event_time', formData.event_time)
+    if (timeError) formErrors.event_time = timeError
     setErrors(formErrors)
 
     // Validar también cada gestión del plan
@@ -223,6 +234,7 @@ useEffect(() => {
       contact: formData.contact.trim(),
       location: formData.location.trim(),
       event_date: formData.event_date,
+      event_time: formData.event_time,
       status: formData.status,
       description: formData.description.trim(),
     }
@@ -310,6 +322,7 @@ useEffect(() => {
         <div ref={bannerRef}
           className={`banner-alert ${feedback.type === 'success' ? 'banner-success' : 'banner-warning'}`}
           role="status"
+          {...successBanner}
         >
           <div className="banner-icon-side">
             {feedback.type === 'success' ? (
@@ -482,6 +495,32 @@ useEffect(() => {
               </div>
 
               <div className="field-group">
+                <label htmlFor="event_time" className="field-label">
+                  Hora del evento <span className="req-star">*</span>
+                </label>
+                <input
+                  id="event_time"
+                  type="time"
+                  name="event_time"
+                  value={formData.event_time}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  className={`field-input ${touched.event_time && errors.event_time ? 'field-input-error' : ''}`}
+                  required
+                  aria-invalid={touched.event_time && !!errors.event_time}
+                  aria-describedby={errors.event_time ? 'time-error' : undefined}
+                />
+                {touched.event_time && errors.event_time && (
+                  <span id="time-error" className="field-error-text">
+                    {errors.event_time}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Fila: Contacto y Lugar */}
+            <div className="field-row-2">
+              <div className="field-group">
                 <label htmlFor="contact" className="field-label">
                   Cliente / contacto
                 </label>
@@ -500,27 +539,26 @@ useEffect(() => {
                   <span className="field-error-text">{errors.contact}</span>
                 )}
               </div>
-            </div>
 
-            {/* Lugar */}
-            <div className="field-group">
-              <label htmlFor="location" className="field-label">
-                Lugar
-              </label>
-              <input
-                id="location"
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                placeholder="Ej: Hacienda El Paraíso, salón principal"
-                maxLength={255}
-                className={`field-input ${touched.location && errors.location ? 'field-input-error' : ''}`}
-              />
-              {touched.location && errors.location && (
-                <span className="field-error-text">{errors.location}</span>
-              )}
+              <div className="field-group">
+                <label htmlFor="location" className="field-label">
+                  Lugar
+                </label>
+                <input
+                  id="location"
+                  type="text"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  placeholder="Ej: Hacienda El Paraíso, salón principal"
+                  maxLength={255}
+                  className={`field-input ${touched.location && errors.location ? 'field-input-error' : ''}`}
+                />
+                {touched.location && errors.location && (
+                  <span className="field-error-text">{errors.location}</span>
+                )}
+              </div>
             </div>
 
             {/* Descripción / Notas */}
@@ -657,17 +695,14 @@ useEffect(() => {
                       <label htmlFor={`plan-${row.key}-hours`} className="field-label">
                         Horas estimadas <span className="req-star">*</span>
                       </label>
-                      <input
+                      <HoursInput
                         id={`plan-${row.key}-hours`}
-                        type="number"
                         name="estimated_hours"
                         value={row.values.estimated_hours}
                         onChange={(e) => handlePlanChange(row.key, e)}
                         onBlur={(e) => handlePlanBlur(row.key, e)}
                         placeholder="Ej: 2.5"
-                        min="0"
-                        step="0.1"
-                        className={`field-input ${row.touched.estimated_hours && row.errors.estimated_hours ? 'field-input-error' : ''}`}
+                        className={row.touched.estimated_hours && row.errors.estimated_hours ? 'field-input-error' : ''}
                         aria-invalid={row.touched.estimated_hours && !!row.errors.estimated_hours}
                         aria-describedby={row.errors.estimated_hours ? `plan-${row.key}-hours-error` : undefined}
                       />
@@ -747,6 +782,16 @@ useEffect(() => {
               </span>
               <span className="p-value">
                 {formData.event_date ? formatDateFromISO(formData.event_date) : <em className="muted">Sin definir</em>}
+              </span>
+            </div>
+
+            <div className="preview-item">
+              <span className="p-label">
+                <IconClock size={13} />
+                <span>Hora:</span>
+              </span>
+              <span className="p-value">
+                {formData.event_time || <em className="muted">Sin definir</em>}
               </span>
             </div>
 

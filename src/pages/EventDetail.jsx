@@ -3,6 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
 import ProgressBar from '../components/ProgressBar'
+import RescheduleButton from '../components/RescheduleButton'
+import SubtaskEditModal from '../components/SubtaskEditModal'
 import {
   IconMapPin,
   IconCalendar,
@@ -20,7 +22,9 @@ import {
 import ConfirmDialog from '../components/ConfirmDialog'
 import DateField from '../components/DateField'
 import DateWarning from '../components/DateWarning'
+import HoursInput from '../components/HoursInput'
 import StatusMessage from '../components/StatusMessage'
+import useAutoDismiss from '../components/useAutoDismiss'
 import { apiFetch } from '../api/client'
 import {
   formatDateFromISO,
@@ -37,6 +41,8 @@ import {
   TASK_PRIORITIES,
   TASK_STATUSES,
 } from '../utils/validators'
+import { countByStatus, getDayOverload, overloadedDays } from '../utils/workload'
+import { useAuth } from '../auth/AuthContext'
 
 const INITIAL_EVENT_FORM_STATE = {
   name: '',
@@ -57,7 +63,9 @@ const INITIAL_SUBTASK_FORM_STATE = {
   note: '',
 }
 
-const EMPTY_FEEDBACK = { type: null, message: '', details: null }
+const EMPTY_FEEDBACK = { type: null, message: '', details: null, link: null }
+
+const hoursFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 })
 
 function buildEventFormValues(eventData) {
   return {
@@ -68,19 +76,6 @@ function buildEventFormValues(eventData) {
     event_date: eventData.event_date || '',
     status: eventData.status || 'planning',
     description: eventData.description || '',
-  }
-}
-
-function buildSubtaskFormValues(task) {
-  const hours = task.estimated_hours
-  return {
-    name: task.name || '',
-    type: task.type || '',
-    scheduled_date: task.scheduled_date || '',
-    estimated_hours: hours != null && hours !== '' ? String(hours) : '',
-    priority: task.priority || 'medium',
-    note: task.note || '',
-    status: task.status || 'pending',
   }
 }
 
@@ -99,7 +94,14 @@ function subtasksProgressKey(subtasks) {
 export default function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const dailyLimit = user?.daily_hours_limit ?? 6
   const [event, setEvent] = useState(null)
+
+  // Todos los eventos del organizador: solo para calcular la carga real de cada
+  // día (la del evento actual no basta para detectar la sobrecarga).
+  const [workloadEvents, setWorkloadEvents] = useState([])
+  const [workloadAttempt, setWorkloadAttempt] = useState(0)
 
   const [conflictState, setConflictState] = useState(null)
   const [postponeState, setPostponeState] = useState(null)
@@ -121,13 +123,22 @@ export default function EventDetail() {
   const [isEventSubmitting, setIsEventSubmitting] = useState(false)
   const [eventFeedback, setEventFeedback] = useState(EMPTY_FEEDBACK)
 
-  const [editingSubtasks, setEditingSubtasks] = useState({})
+  const [editingTask, setEditingTask] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
   // Combinación de gestiones/estados para la que el progreso mostrado es válido
   const progressKeyRef = useRef(null)
   const [fetchedProgress, setFetchedProgress] = useState({ eventId: null, data: null })
+
+  const eventSuccessBanner = useAutoDismiss(() => setEventFeedback(EMPTY_FEEDBACK), {
+    active: eventFeedback.type === 'success',
+    resetKey: eventFeedback.message,
+  })
+  const feedbackSuccessBanner = useAutoDismiss(() => setFeedback(EMPTY_FEEDBACK), {
+    active: feedback.type === 'success',
+    resetKey: feedback.message,
+  })
 
   useEffect(() => {
     const controller = new AbortController()
@@ -151,7 +162,23 @@ export default function EventDetail() {
   const error = loadResult.error
   const fetchEvent = () => setAttempt((n) => n + 1)
 
+  // Refresco silencioso de la carga global: si falla no bloquea la vista ni
+  // muestra error; simplemente deja de marcar jornadas sobrecargadas.
+  useEffect(() => {
+    const controller = new AbortController()
+    apiFetch('/api/events/', { signal: controller.signal })
+      .then((res) => setWorkloadEvents(Array.isArray(res) ? res : []))
+      .catch((err) => {
+        if (err.name !== 'AbortError') setWorkloadEvents([])
+      })
+    return () => controller.abort()
+  }, [workloadAttempt])
+
+  const refreshWorkload = () => setWorkloadAttempt((n) => n + 1)
+
   const subtasks = Array.isArray(event?.subtasks) ? event.subtasks : []
+  const overloadByDate = overloadedDays(workloadEvents, dailyLimit)
+  const statusBreakdown = countByStatus(subtasks)
 
   // Progreso calculado por el backend (US-10, PI-149): el mismo número que en /progreso.
   // Llega con el evento y se vuelve a pedir cuando cambian las gestiones o sus estados.
@@ -174,13 +201,9 @@ export default function EventDetail() {
 
   const progressData =
     (fetchedProgress.eventId === id && fetchedProgress.data) ||
-    event?.progress || { total: 0, executed: 0, percentage: 0 }
+    event?.progress || { total: 0, executed: 0, percentage: 0, pending: 0, postponed: 0 }
 
   const newSubtaskDateRange = { eventDate: event?.event_date }
-  const editDateRange = (subtaskId) => ({
-    eventDate: event?.event_date,
-    originalDate: event?.subtasks?.find((subtask) => subtask.id === subtaskId)?.scheduled_date,
-  })
 
   const handleChangeSubtask = (e) => {
     const { name, value } = e.target
@@ -250,6 +273,7 @@ export default function EventDetail() {
       setSubtaskErrors({})
       setSubtaskTouched({})
       setShowSubtaskForm(false)
+      refreshWorkload()
     } catch (err) {
       if (err.status === 409 && err.details) {
         setConflictState({
@@ -289,9 +313,50 @@ export default function EventDetail() {
         type: 'success',
         message: `Gestión "${data.name}" completada exitosamente.`,
         details: data,
+        link: { to: '/progreso', label: 'Ver progreso' },
       })
+      refreshWorkload()
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'No se pudo completar la gestión.' })
+    }
+  }
+
+  // Reprogramar solo cambia la fecha objetivo: una gestión pospuesta se reactiva
+  // en el backend y la tarjeta se actualiza con la respuesta, sin refetch.
+  const handleReschedule = async (task, newDate) => {
+    if (!newDate || newDate === task.scheduled_date) return
+
+    try {
+      const data = await apiFetch(`/api/subtasks/${task.id}/`, {
+        method: 'PATCH',
+        body: { scheduled_date: newDate },
+      })
+      setEvent((prev) => ({
+        ...prev,
+        subtasks: prev.subtasks.map((s) => (s.id === task.id ? data : s)),
+      }))
+      setFeedback({
+        type: 'success',
+        message: `Gestión "${data.name}" reprogramada al ${formatDateFromISO(newDate)}.`,
+        details: data,
+      })
+      refreshWorkload()
+    } catch (err) {
+      if (err.status === 409 && err.details) {
+        setConflictState({
+          subtask: task,
+          original: task,
+          conflictData: err.details,
+          eventDate: event.event_date,
+          isNew: false,
+          savedHours: task.estimated_hours ?? null,
+        })
+      } else {
+        setFeedback({
+          type: 'error',
+          message: err.message || 'No se pudo reprogramar la gestión.',
+        })
+      }
     }
   }
 
@@ -311,6 +376,7 @@ export default function EventDetail() {
       message: `Gestión "${data.name}" pospuesta.`,
       details: data,
     })
+    refreshWorkload()
   }
 
   const handleStartEditEvent = () => {
@@ -404,147 +470,33 @@ export default function EventDetail() {
     }
   }
 
-  const updateEditingSubtask = (subtaskId, patch) => {
-    setEditingSubtasks((prev) =>
-      prev[subtaskId] ? { ...prev, [subtaskId]: { ...prev[subtaskId], ...patch } } : prev
-    )
-  }
+  const handleStartEditSubtask = (task) => setEditingTask({ task })
 
-  const handleStartEditSubtask = (task) => {
-    setEditingSubtasks((prev) => ({
+  const handleSavedSubtask = (task, updatedTask) => {
+    setEvent((prev) => ({
       ...prev,
-      [task.id]: {
-        form: buildSubtaskFormValues(task),
-        errors: {},
-        touched: {},
-        isSubmitting: false,
-        feedback: EMPTY_FEEDBACK,
-      },
+      subtasks: prev.subtasks.map((s) => (s.id === task.id ? updatedTask : s)),
     }))
+    setEditingTask(null)
+    setFeedback({
+      type: 'success',
+      message: `¡Gestión "${updatedTask.name}" actualizada con éxito!`,
+      details: updatedTask,
+    })
+    refreshWorkload()
   }
 
-  const handleCancelEditSubtask = (subtaskId) => {
-    setEditingSubtasks((prev) => {
-      const next = { ...prev }
-      delete next[subtaskId]
-      return next
+  const handleEditConflict = ({ task, form, pendingChanges, conflictData }) => {
+    setEditingTask(null)
+    setConflictState({
+      subtask: { ...task, ...form, id: task.id },
+      original: task,
+      pendingChanges,
+      savedHours: task.estimated_hours ?? null,
+      conflictData,
+      eventDate: event.event_date,
+      initialForm: form,
     })
-  }
-
-  const handleChangeSubtaskEdit = (subtaskId, e) => {
-    const { name, value } = e.target
-    setEditingSubtasks((prev) => {
-      const entry = prev[subtaskId]
-      if (!entry) return prev
-      const nextEntry = { ...entry, form: { ...entry.form, [name]: value } }
-
-      if (entry.touched[name] || entry.errors[name]) {
-        nextEntry.errors = {
-          ...entry.errors,
-          [name]: validateSubtaskField(name, value, editDateRange(subtaskId)),
-        }
-      }
-      return { ...prev, [subtaskId]: nextEntry }
-    })
-  }
-
-  const handleBlurSubtaskEdit = (subtaskId, e) => {
-    const { name, value } = e.target
-    setEditingSubtasks((prev) => {
-      const entry = prev[subtaskId]
-      if (!entry) return prev
-      return {
-        ...prev,
-        [subtaskId]: {
-          ...entry,
-          touched: { ...entry.touched, [name]: true },
-          errors: { ...entry.errors, [name]: validateSubtaskField(name, value, editDateRange(subtaskId)) },
-        },
-      }
-    })
-  }
-
-  const handleSubmitSubtaskEdit = async (subtaskId, e) => {
-    e.preventDefault()
-    const entry = editingSubtasks[subtaskId]
-    if (!entry) return
-
-    const allTouched = Object.keys(entry.form).reduce((acc, key) => {
-      acc[key] = true
-      return acc
-    }, {})
-
-    const formErrors = validateSubtaskForm(entry.form, editDateRange(subtaskId))
-    const hasErrors = Object.keys(formErrors).length > 0
-
-    setEditingSubtasks((prev) => {
-      const current = prev[subtaskId]
-      if (!current) return prev
-      return {
-        ...prev,
-        [subtaskId]: {
-          ...current,
-          touched: allTouched,
-          errors: formErrors,
-          feedback: hasErrors
-            ? {
-                type: 'error',
-                message: 'Por favor, corrige los errores en los campos requeridos antes de guardar.',
-                details: null,
-              }
-            : EMPTY_FEEDBACK,
-        },
-      }
-    })
-
-    if (hasErrors) return
-
-    updateEditingSubtask(subtaskId, { isSubmitting: true })
-
-    const payload = {
-      name: entry.form.name.trim(),
-      type: entry.form.type,
-      scheduled_date: entry.form.scheduled_date,
-      estimated_hours: Number(entry.form.estimated_hours),
-      priority: entry.form.priority,
-      note: entry.form.note.trim(),
-      status: entry.form.status,
-    }
-
-    try {
-      const data = await apiFetch(`/api/subtasks/${subtaskId}/`, { method: 'PATCH', body: payload })
-      setEvent((prev) => ({
-        ...prev,
-        subtasks: prev.subtasks.map((s) => (s.id === subtaskId ? data : s)),
-      }))
-      handleCancelEditSubtask(subtaskId)
-      setFeedback({
-        type: 'success',
-        message: `¡Gestión "${data.name}" actualizada con éxito!`,
-        details: data,
-      })
-    } catch (err) {
-      if (err.status === 409 && err.details) {
-        const savedSubtask = event?.subtasks?.find((s) => s.id === subtaskId) || {}
-        // El modal resuelve fecha y horas; el resto de lo editado viaja con la resolución
-        const pendingChanges = { ...payload }
-        delete pendingChanges.scheduled_date
-        delete pendingChanges.estimated_hours
-        setConflictState({
-          subtask: { ...savedSubtask, ...entry.form, id: subtaskId },
-          pendingChanges,
-          savedHours: savedSubtask.estimated_hours ?? null,
-          conflictData: err.details,
-          eventDate: event.event_date,
-        })
-      } else {
-        updateEditingSubtask(subtaskId, {
-          feedback: { type: 'error', message: err.message, details: null },
-        })
-      }
-    } finally {
-      updateEditingSubtask(subtaskId, { isSubmitting: false })
-    }
   }
 
   const handleRequestDeleteEvent = () => {
@@ -586,6 +538,7 @@ export default function EventDetail() {
         message: `Gestión "${confirmDelete.name}" eliminada.`,
         details: null,
       })
+      refreshWorkload()
     } catch (err) {
       setConfirmDelete(null)
       const msg = err.message
@@ -625,7 +578,7 @@ export default function EventDetail() {
   return (
     <div className="create-page-container">
       {eventFeedback.type === 'success' && (
-        <div className="banner-alert banner-success" role="alert">
+        <div className="banner-alert banner-success" role="status" {...eventSuccessBanner}>
           <div className="banner-icon-side">
             <IconCheckCircle size={20} className="icon-emerald" />
           </div>
@@ -928,16 +881,25 @@ export default function EventDetail() {
             executed={progressData.executed}
             total={progressData.total}
             percentage={progressData.percentage}
+            pending={statusBreakdown.pending}
+            postponed={statusBreakdown.postponed}
           />
         </div>
 
         {feedback.type === 'success' && (
-          <div className="banner-alert banner-success" role="alert">
+          <div className="banner-alert banner-success" role="status" {...feedbackSuccessBanner}>
             <div className="banner-icon-side">
               <IconCheckCircle size={20} className="icon-emerald" />
             </div>
             <div className="banner-content">
               <strong>{feedback.message}</strong>
+              {feedback.link && (
+                <div className="banner-actions">
+                  <Link to={feedback.link.to} className="btn-alert-outline btn-small">
+                    {feedback.link.label}
+                  </Link>
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -971,9 +933,6 @@ export default function EventDetail() {
         {showSubtaskForm && (
           <div className="form-card-pro">
             <div className="form-card-header">
-              <div className="header-icon-box">
-                <IconPlus size={18} />
-              </div>
               <div>
                 <h2 className="form-heading">Nueva gestión</h2>
                 <p className="form-subheading">Registro de una gestión logística del evento</p>
@@ -1083,17 +1042,14 @@ export default function EventDetail() {
                   <label htmlFor="subtask-hours" className="field-label">
                     Horas estimadas <span className="req-star">*</span>
                   </label>
-                  <input
+                  <HoursInput
                     id="subtask-hours"
-                    type="number"
                     name="estimated_hours"
                     value={subtaskForm.estimated_hours}
                     onChange={handleChangeSubtask}
                     onBlur={handleBlurSubtask}
                     placeholder="Ej: 2.5"
-                    min="0"
-                    step="0.1"
-                    className={`field-input ${subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'field-input-error' : ''}`}
+                    className={subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'field-input-error' : ''}
                     required
                     aria-invalid={Boolean(subtaskTouched.estimated_hours && subtaskErrors.estimated_hours)}
                     aria-describedby={subtaskTouched.estimated_hours && subtaskErrors.estimated_hours ? 'subtask-hours-error' : undefined}
@@ -1147,221 +1103,10 @@ export default function EventDetail() {
         ) : (
           <div className="events-cards-grid">
             {subtasks.map((task) => {
-              const editEntry = editingSubtasks[task.id]
-
-              if (editEntry) {
-                return (
-                  <div key={task.id} className="event-card-item">
-                    {/* Cabecera: Insignia "Editando gestión" a la izquierda y fecha objetivo a la derecha */}
-                    <div
-                      className="event-card-top"
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}
-                    >
-                      <span className="event-status-badge">Editando gestión</span>
-                      {editEntry.form.scheduled_date && (
-                        <span
-                          className="event-date"
-                          style={{ fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <IconCalendar size={14} />
-                          <span>{formatDateFromISO(editEntry.form.scheduled_date)}</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Alerta de error si falla la validación al guardar */}
-                    {editEntry.feedback?.type === 'error' && (
-                      <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '14px' }}>
-                        <IconAlertTriangle size={16} className="icon-rose" />
-                        <span style={{ fontSize: '12.5px' }}>{editEntry.feedback.message}</span>
-                      </div>
-                    )}
-
-                    <form
-                      className="event-edit-form"
-                      onSubmit={(e) => handleSubmitSubtaskEdit(task.id, e)}
-                      noValidate
-                    >
-                      {/* 1. Nombre de la gestión con contador */}
-                      <div className="field-group">
-                        <div className="field-label-row">
-                          <label htmlFor={`edit-${task.id}-name`} className="field-label">
-                            Nombre de la gestión <span className="req-star">*</span>
-                          </label>
-                          <span className="char-counter">{editEntry.form.name.length}/200</span>
-                        </div>
-                        <input
-                          id={`edit-${task.id}-name`}
-                          type="text"
-                          name="name"
-                          value={editEntry.form.name}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input ${editEntry.touched.name && editEntry.errors.name ? 'field-input-error' : ''}`}
-                          placeholder="Ej: Confirmar asistentes"
-                          required
-                          maxLength={200}
-                          aria-invalid={editEntry.touched.name && !!editEntry.errors.name}
-                          aria-describedby={editEntry.touched.name && editEntry.errors.name ? `edit-${task.id}-name-error` : undefined}
-                        />
-                        {editEntry.touched.name && editEntry.errors.name && (
-                          <span id={`edit-${task.id}-name-error`} className="field-error-text">{editEntry.errors.name}</span>
-                        )}
-                      </div>
-
-                      {/* 2. Tipo de gestión */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-type`} className="field-label">
-                          Tipo de gestión <span className="req-star">*</span>
-                        </label>
-                        <select
-                          id={`edit-${task.id}-type`}
-                          name="type"
-                          value={editEntry.form.type}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input field-select ${editEntry.touched.type && editEntry.errors.type ? 'field-input-error' : ''}`}
-                          required
-                          aria-invalid={editEntry.touched.type && !!editEntry.errors.type}
-                          aria-describedby={editEntry.touched.type && editEntry.errors.type ? `edit-${task.id}-type-error` : undefined}
-                        >
-                          <option value="" disabled>Selecciona un tipo</option>
-                          {TASK_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                        {editEntry.touched.type && editEntry.errors.type && (
-                          <span id={`edit-${task.id}-type-error`} className="field-error-text">{editEntry.errors.type}</span>
-                        )}
-                      </div>
-
-                      {/* 3. Fecha objetivo */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-date`} className="field-label">
-                          Fecha objetivo <span className="req-star">*</span>
-                        </label>
-                        <DateField
-                          id={`edit-${task.id}-date`}
-                          name="scheduled_date"
-                          value={editEntry.form.scheduled_date}
-                          min={task.scheduled_date < todayISO() ? task.scheduled_date : todayISO()}
-                          max={event.event_date}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
-                          required
-                          aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
-                          aria-describedby={editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? `edit-${task.id}-scheduled_date-error` : undefined}
-                        />
-                        {editEntry.touched.scheduled_date && editEntry.errors.scheduled_date && (
-                          <span id={`edit-${task.id}-scheduled_date-error`} className="field-error-text">{editEntry.errors.scheduled_date}</span>
-                        )}
-                      </div>
-
-                      {/* 4. Horas estimadas */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-hours`} className="field-label">
-                          Horas estimadas <span className="req-star">*</span>
-                        </label>
-                        <input
-                          id={`edit-${task.id}-hours`}
-                          type="number"
-                          name="estimated_hours"
-                          value={editEntry.form.estimated_hours}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          onBlur={(e) => handleBlurSubtaskEdit(task.id, e)}
-                          placeholder="Ej: 1.0"
-                          min="0.1"
-                          step="0.1"
-                          className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
-                          required
-                          aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
-                          aria-describedby={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? `edit-${task.id}-estimated_hours-error` : undefined}
-                        />
-                        {editEntry.touched.estimated_hours && editEntry.errors.estimated_hours && (
-                          <span id={`edit-${task.id}-estimated_hours-error`} className="field-error-text">{editEntry.errors.estimated_hours}</span>
-                        )}
-                      </div>
-
-                      {/* 5. Prioridad */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-priority`} className="field-label">
-                          Prioridad
-                        </label>
-                        <select
-                          id={`edit-${task.id}-priority`}
-                          name="priority"
-                          value={editEntry.form.priority}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          className="field-input field-select"
-                        >
-                          {TASK_PRIORITIES.map((p) => (
-                            <option key={p.value} value={p.value}>{p.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* 6. Estado */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-status`} className="field-label">
-                          Estado
-                        </label>
-                        <select
-                          id={`edit-${task.id}-status`}
-                          name="status"
-                          value={editEntry.form.status}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          className="field-input field-select"
-                        >
-                          {TASK_STATUSES.map((st) => (
-                            <option key={st.value} value={st.value}>{st.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* 7. Nota */}
-                      <div className="field-group">
-                        <label htmlFor={`edit-${task.id}-note`} className="field-label">
-                          Nota
-                        </label>
-                        <textarea
-                          id={`edit-${task.id}-note`}
-                          name="note"
-                          value={editEntry.form.note}
-                          onChange={(e) => handleChangeSubtaskEdit(task.id, e)}
-                          placeholder="Indicaciones adicionales para esta gestión..."
-                          rows="3"
-                          className="field-input field-textarea"
-                        />
-                      </div>
-
-                      {/* 8. Botones de acción */}
-                      <div className="form-actions-row" style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button
-                          type="button"
-                          className="btn-sec-pro"
-                          onClick={() => handleCancelEditSubtask(task.id)}
-                          disabled={editEntry.isSubmitting}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="submit"
-                          className="btn-submit-pro"
-                          disabled={editEntry.isSubmitting}
-                        >
-                          {editEntry.isSubmitting ? 'Guardando...' : 'Guardar cambios'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                )
-              }
-
-
               const afterEvent = isAfterEventDate(task, event.event_date)
               const isTaskDone = task.status === 'done'
               const isTaskPostponed = task.status === 'postponed'
+              const taskOverload = getDayOverload(overloadByDate, task)
 
               return (
                 <div key={task.id} className={`event-card-item ${afterEvent ? 'card-date-warning' : ''}`} style={{ position: 'relative' }}>
@@ -1441,6 +1186,16 @@ export default function EventDetail() {
 
                   {afterEvent && <DateWarning eventDate={event.event_date} />}
 
+                  {taskOverload !== null && (
+                    <p className="task-overload-warning" role="note">
+                      <IconAlertTriangle size={16} />
+                      <span>
+                        Jornada sobrecargada: {hoursFormatter.format(taskOverload)} h de{' '}
+                        {hoursFormatter.format(dailyLimit)} h
+                      </span>
+                    </p>
+                  )}
+
                   {/* Metadatos: Horas y Prioridad */}
                   <div className="event-details-list" style={{ marginTop: '8px' }}>
                     <div className="event-detail-row">
@@ -1459,37 +1214,36 @@ export default function EventDetail() {
                     </p>
                   )}
 
-                  {/* Botones inferiores limpios y simétricos (Hecha / Posponer) */}
-                  <div className="event-card-footer" style={{ marginTop: '16px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                    <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
+                  {/* Acciones de la tarjeta: Hecha, Reprogramar y Posponer */}
+                  <div className="event-card-footer">
+                    <div className="task-card-actions">
                       <button
                         type="button"
-                        className="btn-submit-pro"
-                        style={{
-                          flex: 1,
-                          padding: '6px 12px',
-                          fontSize: '13px',
-                          justifyContent: 'center',
-                          opacity: isTaskDone ? 0.6 : 1,
-                        }}
+                        className="btn-submit-pro btn-small"
                         onClick={() => handleMarkDone(task)}
                         disabled={isTaskDone}
                         title={isTaskDone ? 'Gestión ya completada' : 'Marcar gestión como hecha'}
+                        aria-label={
+                          isTaskDone
+                            ? `Gestión ${task.name} ya completada`
+                            : `Marcar gestión ${task.name} como hecha`
+                        }
                       >
-                        <IconCheckCircle size={14} style={{ marginRight: '6px' }} />
+                        <IconCheckCircle size={14} />
                         {isTaskDone ? 'Completada' : 'Hecha'}
                       </button>
 
+                      <RescheduleButton
+                        task={task}
+                        min={todayISO()}
+                        max={event.event_date}
+                        onChange={(newDate) => handleReschedule(task, newDate)}
+                        disabled={isTaskDone}
+                      />
+
                       <button
                         type="button"
-                        className="btn-sec-pro"
-                        style={{
-                          flex: 1,
-                          padding: '6px 12px',
-                          fontSize: '13px',
-                          justifyContent: 'center',
-                          opacity: (isTaskDone || isTaskPostponed) ? 0.6 : 1,
-                        }}
+                        className="btn-sec-pro btn-small"
                         onClick={() => setPostponeState(task)}
                         disabled={isTaskDone || isTaskPostponed}
                         title={
@@ -1498,6 +1252,13 @@ export default function EventDetail() {
                             : isTaskPostponed
                             ? 'Ya se encuentra pospuesta'
                             : 'Posponer gestión con nota explicativa'
+                        }
+                        aria-label={
+                          isTaskDone
+                            ? `No se puede posponer la gestión ${task.name} porque está completada`
+                            : isTaskPostponed
+                            ? `Gestión ${task.name} ya pospuesta`
+                            : `Posponer gestión ${task.name}`
                         }
                       >
                         {isTaskPostponed ? 'Pospuesta' : 'Posponer'}
@@ -1527,6 +1288,18 @@ export default function EventDetail() {
         onCancel={handleCancelDelete}
       />
 
+      {editingTask && (
+        <SubtaskEditModal
+          key={editingTask.task.id}
+          task={editingTask.task}
+          eventDate={event.event_date}
+          initialForm={editingTask.initialForm}
+          onSaved={(updatedTask) => handleSavedSubtask(editingTask.task, updatedTask)}
+          onConflict={handleEditConflict}
+          onCancel={() => setEditingTask(null)}
+        />
+      )}
+
       {conflictState && (
         <OverloadConflictModal
           conflictData={conflictState?.conflictData}
@@ -1538,6 +1311,7 @@ export default function EventDetail() {
           onResolved={(resultTask, message) => {
             const wasNew = conflictState?.isNew
             setConflictState(null)
+            setEditingTask(null)
             if (wasNew) {
               setEvent((prev) => ({
                 ...prev,
@@ -1550,11 +1324,17 @@ export default function EventDetail() {
                 ...prev,
                 subtasks: prev.subtasks.map((s) => (s.id === resultTask.id ? resultTask : s)),
               }))
-              handleCancelEditSubtask(resultTask.id)
             }
             setFeedback({ type: 'success', message, details: resultTask })
+            refreshWorkload()
           }}
-          onCancel={() => setConflictState(null)}
+          onCancel={() => {
+            const state = conflictState
+            setConflictState(null)
+            if (!state?.isNew && state?.initialForm && state?.original) {
+              setEditingTask({ task: state.original, initialForm: state.initialForm })
+            }
+          }}
         />
       )}
 

@@ -5,6 +5,7 @@ import {
   IconCalendar,
   IconCheckCircle,
   IconClock,
+  IconFilter,
   IconPlus,
   IconRefresh,
   IconX,
@@ -13,10 +14,12 @@ import {
 } from '../components/Icons'
 import SortRuleHelp from '../components/SortRuleHelp'
 import StatusMessage from '../components/StatusMessage'
-import DateField from '../components/DateField'
 import DateWarning from '../components/DateWarning'
 import OverloadConflictModal from '../components/OverloadConflictModal'
 import PostponeModal from '../components/PostponeModal'
+import ProgressBar from '../components/ProgressBar'
+import RescheduleButton from '../components/RescheduleButton'
+import SubtaskEditModal from '../components/SubtaskEditModal'
 import LoadingOverlay, { TodaySkeleton } from '../components/LoadingOverlay'
 import { apiFetch, CONNECTION_ERROR_MESSAGE } from '../api/client'
 import {
@@ -25,12 +28,9 @@ import {
   getOptionLabel,
   isAfterEventDate,
   todayISO,
-  validateSubtaskField,
-  validateSubtaskForm,
-  TASK_TYPES,
-  TASK_PRIORITIES,
   TASK_STATUSES,
 } from '../utils/validators'
+import { countByStatus, getDayOverload, overloadedDays } from '../utils/workload'
 import { useAuth } from '../auth/AuthContext'
 
 // Las hechas no aparecen en Hoy y las pospuestas ya tienen su propia columna:
@@ -109,30 +109,14 @@ function formatLongDate(isodate) {
   return `${weekday}, ${formatDateFromISO(isodate)}`
 }
 
-function buildSubtaskFormValues(task) {
-  const hours = task.estimated_hours
-  return {
-    name: task.name || '',
-    type: task.type || 'other',
-    scheduled_date: task.scheduled_date || '',
-    estimated_hours: hours != null && hours !== '' ? String(hours) : '',
-    priority: task.priority || 'medium',
-    note: task.note || '',
-    status: task.status || 'pending',
-  }
-}
-
 function TodayCard({
   task,
   group,
   today,
   eventDate,
-  editEntry,
+  overloadHours,
+  dailyLimit,
   onStartEdit,
-  onCancelEdit,
-  onChangeEdit,
-  onBlurEdit,
-  onSubmitEdit,
   onReschedule,
   onMarkDone,
   onRequestPostpone,
@@ -140,224 +124,7 @@ function TodayCard({
   const relative = describeRelativeDate(group.key, task.scheduled_date, today)
   const hours = hoursFormatter.format(Number(task.estimated_hours))
   const afterEvent = isAfterEventDate(task, eventDate)
-  const dateInputRef = useRef(null)
 
-  const triggerPicker = () => {
-    if (!dateInputRef.current) return
-    try {
-      dateInputRef.current.showPicker()
-    } catch {
-      dateInputRef.current.focus()
-      dateInputRef.current.click()
-    }
-  }
-
-  // --- MODO EDICIÓN (FORMULARIO IDÉNTICO AL DEL DETALLE DE EVENTO) ---
-  if (editEntry) {
-    return (
-      <li className="today-card" style={{ padding: '16px' }}>
-        {/* Cabecera del formulario de edición */}
-        <div
-          className="event-card-top"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}
-        >
-          <span className="event-status-badge">Editando gestión</span>
-          {editEntry.form.scheduled_date && (
-            <span
-              className="event-date"
-              style={{ fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-            >
-              <IconCalendar size={14} />
-              <span>{formatDateFromISO(editEntry.form.scheduled_date)}</span>
-            </span>
-          )}
-        </div>
-
-        {editEntry.feedback?.type === 'error' && (
-          <div className="banner-alert banner-error" role="alert" style={{ marginBottom: '14px' }}>
-            <IconAlertTriangle size={16} className="icon-rose" />
-            <span style={{ fontSize: '12.5px' }}>{editEntry.feedback.message}</span>
-          </div>
-        )}
-
-        <form onSubmit={(e) => onSubmitEdit(task, e)} noValidate>
-          {/* 1. Nombre de la gestión */}
-          <div className="field-group">
-            <div className="field-label-row">
-              <label htmlFor={`edit-today-${task.id}-name`} className="field-label">
-                Nombre de la gestión <span className="req-star">*</span>
-              </label>
-              <span className="char-counter">{editEntry.form.name.length}/200</span>
-            </div>
-            <input
-              id={`edit-today-${task.id}-name`}
-              type="text"
-              name="name"
-              value={editEntry.form.name}
-              onChange={(e) => onChangeEdit(task.id, task, e)}
-              onBlur={(e) => onBlurEdit(task.id, task, e)}
-              className={`field-input ${editEntry.touched.name && editEntry.errors.name ? 'field-input-error' : ''}`}
-              placeholder="Ej: Confirmar asistentes"
-              required
-              maxLength={200}
-              aria-invalid={editEntry.touched.name && !!editEntry.errors.name}
-              aria-describedby={editEntry.touched.name && editEntry.errors.name ? `edit-today-${task.id}-name-error` : undefined}
-            />
-            {editEntry.touched.name && editEntry.errors.name && (
-              <span id={`edit-today-${task.id}-name-error`} className="field-error-text">{editEntry.errors.name}</span>
-            )}
-          </div>
-
-          {/* 2. Tipo de gestión */}
-          <div className="field-group">
-            <label htmlFor={`edit-today-${task.id}-type`} className="field-label">
-              Tipo de gestión <span className="req-star">*</span>
-            </label>
-            <select
-              id={`edit-today-${task.id}-type`}
-              name="type"
-              value={editEntry.form.type}
-              onChange={(e) => onChangeEdit(task.id, task, e)}
-              onBlur={(e) => onBlurEdit(task.id, task, e)}
-              className={`field-input field-select ${editEntry.touched.type && editEntry.errors.type ? 'field-input-error' : ''}`}
-              required
-              aria-invalid={editEntry.touched.type && !!editEntry.errors.type}
-              aria-describedby={editEntry.touched.type && editEntry.errors.type ? `edit-today-${task.id}-type-error` : undefined}
-            >
-              <option value="" disabled>Selecciona un tipo</option>
-              {TASK_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-            {editEntry.touched.type && editEntry.errors.type && (
-              <span id={`edit-today-${task.id}-type-error`} className="field-error-text">{editEntry.errors.type}</span>
-            )}
-          </div>
-
-          {/* 3. Fecha objetivo */}
-          <div className="field-group">
-            <label htmlFor={`edit-today-${task.id}-date`} className="field-label">
-              Fecha objetivo <span className="req-star">*</span>
-            </label>
-            <DateField
-              id={`edit-today-${task.id}-date`}
-              name="scheduled_date"
-              value={editEntry.form.scheduled_date}
-              min={task.scheduled_date < todayISO() ? task.scheduled_date : todayISO()}
-              max={eventDate}
-              onChange={(e) => onChangeEdit(task.id, task, e)}
-              onBlur={(e) => onBlurEdit(task.id, task, e)}
-              className={`field-input ${editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? 'field-input-error' : ''}`}
-              required
-              aria-invalid={editEntry.touched.scheduled_date && !!editEntry.errors.scheduled_date}
-              aria-describedby={editEntry.touched.scheduled_date && editEntry.errors.scheduled_date ? `edit-today-${task.id}-scheduled_date-error` : undefined}
-            />
-            {editEntry.touched.scheduled_date && editEntry.errors.scheduled_date && (
-              <span id={`edit-today-${task.id}-scheduled_date-error`} className="field-error-text">{editEntry.errors.scheduled_date}</span>
-            )}
-          </div>
-
-          {/* 4. Horas estimadas */}
-          <div className="field-group">
-            <label htmlFor={`edit-today-${task.id}-hours`} className="field-label">
-              Horas estimadas <span className="req-star">*</span>
-            </label>
-            <input
-              id={`edit-today-${task.id}-hours`}
-              type="number"
-              name="estimated_hours"
-              value={editEntry.form.estimated_hours}
-              onChange={(e) => onChangeEdit(task.id, task, e)}
-              onBlur={(e) => onBlurEdit(task.id, task, e)}
-              placeholder="Ej: 1.0"
-              min="0.1"
-              step="0.1"
-              className={`field-input ${editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? 'field-input-error' : ''}`}
-              required
-              aria-invalid={editEntry.touched.estimated_hours && !!editEntry.errors.estimated_hours}
-              aria-describedby={editEntry.touched.estimated_hours && editEntry.errors.estimated_hours ? `edit-today-${task.id}-estimated_hours-error` : undefined}
-            />
-            {editEntry.touched.estimated_hours && editEntry.errors.estimated_hours && (
-              <span id={`edit-today-${task.id}-estimated_hours-error`} className="field-error-text">{editEntry.errors.estimated_hours}</span>
-            )}
-          </div>
-
-          {/* 5. Prioridad */}
-          <div className="field-group">
-            <label htmlFor={`edit-today-${task.id}-priority`} className="field-label">
-              Prioridad
-            </label>
-            <select
-              id={`edit-today-${task.id}-priority`}
-              name="priority"
-              value={editEntry.form.priority}
-              onChange={(e) => onChangeEdit(task.id, task, e)}
-              className="field-input field-select"
-            >
-              {TASK_PRIORITIES.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* 6. Estado */}
-          <div className="field-group">
-            <label htmlFor={`edit-today-${task.id}-status`} className="field-label">
-              Estado
-            </label>
-            <select
-              id={`edit-today-${task.id}-status`}
-              name="status"
-              value={editEntry.form.status}
-              onChange={(e) => onChangeEdit(task.id, task, e)}
-              className="field-input field-select"
-            >
-              {TASK_STATUSES.map((st) => (
-                <option key={st.value} value={st.value}>{st.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* 7. Nota */}
-          <div className="field-group">
-            <label htmlFor={`edit-today-${task.id}-note`} className="field-label">
-              Nota
-            </label>
-            <textarea
-              id={`edit-today-${task.id}-note`}
-              name="note"
-              value={editEntry.form.note}
-              onChange={(e) => onChangeEdit(task.id, task, e)}
-              placeholder="Indicaciones adicionales para esta gestión..."
-              rows="3"
-              className="field-input field-textarea"
-            />
-          </div>
-
-          {/* 8. Botones de acción */}
-          <div className="form-actions-row" style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn-sec-pro"
-              onClick={() => onCancelEdit(task.id)}
-              disabled={editEntry.isSubmitting}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="btn-submit-pro"
-              disabled={editEntry.isSubmitting}
-            >
-              {editEntry.isSubmitting ? 'Guardando...' : 'Guardar cambios'}
-            </button>
-          </div>
-        </form>
-      </li>
-    )
-  }
-
-  // --- MODO VISTA DE TARJETA ---
   return (
     <li className={`today-card today-card-${group.key} ${afterEvent ? 'card-date-warning' : ''}`}>
       {/* La urgencia la indican la columna y su color: la tarjeta no repite la etiqueta */}
@@ -380,40 +147,13 @@ function TodayCard({
       </Link>
 
       <div className="today-card-meta">
-        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-          <button
-            type="button"
-            className="today-meta-item today-date-btn"
-            onClick={triggerPicker}
-            title="Haz clic para reprogramar fecha"
-            aria-label={`Fecha actual: ${formatDateFromISO(task.scheduled_date)}. Haz clic para cambiarla`}
-          >
-            <IconCalendar size={14} />
-            <span>
-              {formatDateFromISO(task.scheduled_date)}
-              {relative && <span className="today-meta-relative"> · {relative}</span>}
-            </span>
-          </button>
-          <input
-            ref={dateInputRef}
-            type="date"
-            value={task.scheduled_date}
-            min={today || todayISO()}
-            max={eventDate || undefined}
-            onChange={(e) => onReschedule(task, e.target.value)}
-            style={{
-              position: 'absolute',
-              opacity: 0,
-              pointerEvents: 'none',
-              width: '1px',
-              height: '1px',
-              bottom: 0,
-              left: 0,
-            }}
-            tabIndex={-1}
-            aria-hidden="true"
-          />
-        </div>
+        <span className="today-meta-item">
+          <IconCalendar size={14} />
+          <span>
+            {formatDateFromISO(task.scheduled_date)}
+            {relative && <span className="today-meta-relative"> · {relative}</span>}
+          </span>
+        </span>
 
         <span className="today-meta-item">
           <IconClock size={14} />
@@ -430,25 +170,42 @@ function TodayCard({
 
       {afterEvent && <DateWarning eventDate={eventDate} />}
 
-      <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+      {overloadHours !== null && (
+        <p className="task-overload-warning" role="note">
+          <IconAlertTriangle size={16} />
+          <span>
+            Jornada sobrecargada: {hoursFormatter.format(overloadHours)} h de{' '}
+            {hoursFormatter.format(dailyLimit)} h
+          </span>
+        </p>
+      )}
+
+      <div className="task-card-actions">
         <button
           type="button"
           className="btn-submit-pro btn-small"
-          style={{ padding: '4px 10px', fontSize: '12px' }}
           onClick={() => onMarkDone(task)}
-          title="Marcar como hecha"
+          title="Marcar gestión como hecha"
+          aria-label={`Marcar gestión ${task.name} como hecha`}
         >
-          <IconCheckCircle size={14} style={{ marginRight: '4px' }} />
+          <IconCheckCircle size={14} />
           Hecha
         </button>
+
+        <RescheduleButton
+          task={task}
+          min={today || todayISO()}
+          max={eventDate}
+          onChange={(newDate) => onReschedule(task, newDate)}
+        />
 
         {task.status !== 'postponed' && (
           <button
             type="button"
             className="btn-sec-pro btn-small"
-            style={{ padding: '4px 10px', fontSize: '12px' }}
             onClick={() => onRequestPostpone(task)}
             title="Posponer gestión con nota explicativa"
+            aria-label={`Posponer gestión ${task.name}`}
           >
             Posponer
           </button>
@@ -465,12 +222,9 @@ function TodayGroup({
   today,
   windowDays,
   eventDateById,
-  editingSubtasks,
+  overloadByDate,
+  dailyLimit,
   onStartEdit,
-  onCancelEdit,
-  onChangeEdit,
-  onBlurEdit,
-  onSubmitEdit,
   onReschedule,
   onMarkDone,
   onRequestPostpone,
@@ -502,12 +256,9 @@ function TodayGroup({
               group={group}
               today={today}
               eventDate={eventDateById.get(task.event_id)}
-              editEntry={editingSubtasks[task.id]}
+              overloadHours={getDayOverload(overloadByDate, task)}
+              dailyLimit={dailyLimit}
               onStartEdit={onStartEdit}
-              onCancelEdit={onCancelEdit}
-              onChangeEdit={onChangeEdit}
-              onBlurEdit={onBlurEdit}
-              onSubmitEdit={onSubmitEdit}
               onReschedule={onReschedule}
               onMarkDone={onMarkDone}
               onRequestPostpone={onRequestPostpone}
@@ -527,7 +278,7 @@ function describeDaysUntil(today, eventDate) {
   return `En ${days} días`
 }
 
-function TodaySummary({ data, events, dailyLimit }) {
+function TodaySummary({ data, events, dailyLimit, filteredEvent }) {
   const pendingHours = [...(data.overdue || []), ...(data.due_today || [])].reduce(
     (sum, task) => sum + Number(task.estimated_hours),
     0,
@@ -539,6 +290,9 @@ function TodaySummary({ data, events, dailyLimit }) {
     .filter((ev) => ev.event_date >= data.today)
     .sort((a, b) => a.event_date.localeCompare(b.event_date))
     .slice(0, 3)
+
+  const filteredBreakdown = filteredEvent ? countByStatus(filteredEvent.subtasks) : null
+  const filteredProgress = filteredEvent?.progress || { total: 0, executed: 0, percentage: 0 }
 
   return (
     <aside className="today-aside" aria-label="Resumen">
@@ -608,6 +362,22 @@ function TodaySummary({ data, events, dailyLimit }) {
           </ul>
         )}
       </section>
+
+      {filteredEvent && (
+        <section className="card-pro today-progress-card">
+          <div className="card-pro-header">
+            <h3>Progreso de preparación</h3>
+          </div>
+          <p className="today-progress-event">{filteredEvent.name}</p>
+          <ProgressBar
+            executed={filteredProgress.executed}
+            total={filteredProgress.total}
+            percentage={filteredProgress.percentage}
+            pending={filteredBreakdown.pending}
+            postponed={filteredBreakdown.postponed}
+          />
+        </section>
+      )}
     </aside>
   )
 }
@@ -628,7 +398,7 @@ export default function Today() {
   const requestKey = `${eventFilter}|${statusFilter}|${userDailyLimit}|${attempt}`
   const [result, setResult] = useState({ key: null, data: null, error: null })
 
-  const [editingSubtasks, setEditingSubtasks] = useState({})
+  const [editingTask, setEditingTask] = useState(null)
   const [conflictState, setConflictState] = useState(null)
   const [postponeState, setPostponeState] = useState(null)
   const [toast, setToast] = useState(null)
@@ -658,10 +428,16 @@ export default function Today() {
   const loadToday = () => setAttempt((n) => n + 1)
 
   useEffect(() => {
-    apiFetch('/api/events/')
+    const controller = new AbortController()
+    apiFetch('/api/events/', { signal: controller.signal })
       .then((res) => setEvents(Array.isArray(res) ? res : []))
-      .catch(() => setEvents([]))
-  }, [])
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        // Se conserva la lista anterior: la vista sigue mostrando el último
+        // progreso y las advertencias conocidas si el refresco falla.
+      })
+    return () => controller.abort()
+  }, [attempt])
 
   const updateFilter = (name, value) => {
     const next = new URLSearchParams(searchParams)
@@ -678,6 +454,10 @@ export default function Today() {
     : 0
 
   const eventDateById = new Map(events.map((ev) => [ev.id, ev.event_date]))
+  const overloadByDate = overloadedDays(events, userDailyLimit, data?.today || todayISO())
+  const filteredEvent = eventFilter
+    ? events.find((ev) => String(ev.id) === eventFilter) || null
+    : null
 
   /**
    * Aviso de éxito con "Deshacer". `previousTask` es la gestión antes del cambio y
@@ -685,7 +465,7 @@ export default function Today() {
    * Si el cambio movió la gestión desde una fecha que ya pasó, no se ofrece
    * Deshacer: el backend no permite volver a programar en el pasado.
    */
-  const showUndoToast = (previousTask, updatedTask, message) => {
+  const showUndoToast = (previousTask, updatedTask, message, extra = {}) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setToast(null), UNDO_TOAST_MS)
 
@@ -697,6 +477,7 @@ export default function Today() {
     setToast({
       type: 'success',
       message,
+      link: extra.link || null,
       subtaskId: previousTask.id,
       undoChanges: canUndo ? undoChanges : null,
     })
@@ -730,158 +511,25 @@ export default function Today() {
     }
   }
 
-  // --- CONTROL DE EDICIÓN EN HOY ---
-  const handleStartEditSubtask = (task) => {
-    setEditingSubtasks((prev) => ({
-      ...prev,
-      [task.id]: {
-        form: buildSubtaskFormValues(task),
-        errors: {},
-        touched: {},
-        isSubmitting: false,
-        feedback: { type: null, message: '' },
-      },
-    }))
+  // --- EDICIÓN EN MODAL ---
+  const handleStartEditSubtask = (task) => setEditingTask({ task })
+
+  const handleSavedSubtask = (task, updatedTask) => {
+    setEditingTask(null)
+    loadToday()
+    showUndoToast(task, updatedTask, `¡Gestión "${updatedTask.name}" actualizada con éxito!`)
   }
 
-  const handleCancelEditSubtask = (subtaskId) => {
-    setEditingSubtasks((prev) => {
-      const next = { ...prev }
-      delete next[subtaskId]
-      return next
+  const handleEditConflict = ({ task, form, pendingChanges, conflictData }) => {
+    setEditingTask(null)
+    setConflictState({
+      subtask: { ...task, ...form, id: task.id },
+      original: task,
+      pendingChanges,
+      conflictData,
+      eventDate: eventDateById.get(task.event_id),
+      initialForm: form,
     })
-  }
-
-  const editDateRange = (task) => ({
-    eventDate: eventDateById.get(task.event_id),
-    originalDate: task.scheduled_date,
-  })
-
-  const handleChangeSubtaskEdit = (subtaskId, task, e) => {
-    const { name, value } = e.target
-    setEditingSubtasks((prev) => {
-      const entry = prev[subtaskId]
-      if (!entry) return prev
-      const nextEntry = { ...entry, form: { ...entry.form, [name]: value } }
-
-      if (entry.touched[name] || entry.errors[name]) {
-        nextEntry.errors = {
-          ...entry.errors,
-          [name]: validateSubtaskField(name, value, editDateRange(task)),
-        }
-      }
-      return { ...prev, [subtaskId]: nextEntry }
-    })
-  }
-
-  const handleBlurSubtaskEdit = (subtaskId, task, e) => {
-    const { name, value } = e.target
-    setEditingSubtasks((prev) => {
-      const entry = prev[subtaskId]
-      if (!entry) return prev
-      return {
-        ...prev,
-        [subtaskId]: {
-          ...entry,
-          touched: { ...entry.touched, [name]: true },
-          errors: {
-            ...entry.errors,
-            [name]: validateSubtaskField(name, value, editDateRange(task)),
-          },
-        },
-      }
-    })
-  }
-
-  const handleSubmitSubtaskEdit = async (task, e) => {
-    e.preventDefault()
-    const subtaskId = task.id
-    const entry = editingSubtasks[subtaskId]
-    if (!entry) return
-
-    const allTouched = Object.keys(entry.form).reduce((acc, key) => {
-      acc[key] = true
-      return acc
-    }, {})
-
-    const formErrors = validateSubtaskForm(entry.form, editDateRange(task))
-    const hasErrors = Object.keys(formErrors).length > 0
-
-    setEditingSubtasks((prev) => {
-      const current = prev[subtaskId]
-      if (!current) return prev
-      return {
-        ...prev,
-        [subtaskId]: {
-          ...current,
-          touched: allTouched,
-          errors: formErrors,
-          feedback: hasErrors
-            ? {
-                type: 'error',
-                message: 'Por favor, corrige los errores en los campos requeridos antes de guardar.',
-              }
-            : { type: null, message: '' },
-        },
-      }
-    })
-
-    if (hasErrors) return
-
-    setEditingSubtasks((prev) => ({
-      ...prev,
-      [subtaskId]: { ...prev[subtaskId], isSubmitting: true },
-    }))
-
-    const payload = {
-      name: entry.form.name.trim(),
-      type: entry.form.type,
-      scheduled_date: entry.form.scheduled_date,
-      estimated_hours: Number(entry.form.estimated_hours),
-      priority: entry.form.priority,
-      note: entry.form.note.trim(),
-      status: entry.form.status,
-    }
-
-    try {
-      const data = await apiFetch(`/api/subtasks/${subtaskId}/`, {
-        method: 'PATCH',
-        body: payload,
-      })
-      handleCancelEditSubtask(subtaskId)
-      loadToday()
-      showUndoToast(task, data, `¡Gestión "${data.name}" actualizada con éxito!`)
-    } catch (err) {
-      if (err.status === 409 && err.details) {
-        // El modal resuelve fecha y horas; el resto de lo editado viaja con la resolución
-        const pendingChanges = { ...payload }
-        delete pendingChanges.scheduled_date
-        delete pendingChanges.estimated_hours
-        setConflictState({
-          subtask: { ...task, ...entry.form, id: subtaskId },
-          original: task,
-          pendingChanges,
-          conflictData: err.details,
-          eventDate: eventDateById.get(task.event_id),
-        })
-      } else {
-        setEditingSubtasks((prev) => ({
-          ...prev,
-          [subtaskId]: {
-            ...prev[subtaskId],
-            feedback: { type: 'error', message: err.message },
-          },
-        }))
-      }
-    } finally {
-      setEditingSubtasks((prev) => {
-        if (!prev[subtaskId]) return prev
-        return {
-          ...prev,
-          [subtaskId]: { ...prev[subtaskId], isSubmitting: false },
-        }
-      })
-    }
   }
 
   const handleReschedule = async (task, newDate) => {
@@ -915,7 +563,9 @@ export default function Today() {
         body: { status: 'done' },
       })
       loadToday()
-      showUndoToast(task, updated, `¡Gestión "${task.name}" completada!`)
+      showUndoToast(task, updated, `¡Gestión "${task.name}" completada!`, {
+        link: { to: '/progreso', label: 'Ver progreso' },
+      })
     } catch (err) {
       showErrorToast(`No pudimos marcar "${task.name}" como hecha`, err)
     }
@@ -936,12 +586,9 @@ export default function Today() {
     eventDateById,
     today: data?.today,
     windowDays,
-    editingSubtasks,
+    overloadByDate,
+    dailyLimit: userDailyLimit,
     onStartEdit: handleStartEditSubtask,
-    onCancelEdit: handleCancelEditSubtask,
-    onChangeEdit: handleChangeSubtaskEdit,
-    onBlurEdit: handleBlurSubtaskEdit,
-    onSubmitEdit: handleSubmitSubtaskEdit,
     onReschedule: handleReschedule,
     onMarkDone: handleMarkDone,
     onRequestPostpone: (task) => setPostponeState(task),
@@ -1017,51 +664,57 @@ export default function Today() {
   return (
     <div className="today-page">
       <div className="today-toolbar">
-        <div className="today-filters" role="group" aria-label="Filtrar gestiones">
-          <div className="today-filter">
-            <label htmlFor="filter-event" className="field-label">
-              Evento
-            </label>
-            <select
-              id="filter-event"
-              className="field-input field-select"
-              value={eventFilter}
-              onChange={(e) => updateFilter('event', e.target.value)}
-            >
-              <option value="">Todos</option>
-              {events.map((ev) => (
-                <option key={ev.id} value={String(ev.id)}>
-                  {ev.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="today-filters-block">
+          <h2 id="today-filters-title" className="today-filters-title">
+            <IconFilter size={16} />
+            <span>Filtrar gestiones</span>
+          </h2>
+          <div className="today-filters" role="group" aria-labelledby="today-filters-title">
+            <div className="today-filter">
+              <label htmlFor="filter-event" className="field-label">
+                Evento
+              </label>
+              <select
+                id="filter-event"
+                className="field-input field-select"
+                value={eventFilter}
+                onChange={(e) => updateFilter('event', e.target.value)}
+              >
+                <option value="">Todos</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={String(ev.id)}>
+                    {ev.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="today-filter">
-            <label htmlFor="filter-status" className="field-label">
-              Estado
-            </label>
-            <select
-              id="filter-status"
-              className="field-input field-select"
-              value={statusFilter}
-              onChange={(e) => updateFilter('status', e.target.value)}
-            >
-              <option value="">Todos</option>
-              {STATUS_FILTER_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="today-filter">
+              <label htmlFor="filter-status" className="field-label">
+                Estado
+              </label>
+              <select
+                id="filter-status"
+                className="field-input field-select"
+                value={statusFilter}
+                onChange={(e) => updateFilter('status', e.target.value)}
+              >
+                <option value="">Todos</option>
+                {STATUS_FILTER_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {hasFilters && (
-            <button type="button" className="btn-sec-pro btn-clear-filters" onClick={clearFilters}>
-              <IconX size={14} />
-              <span>Limpiar filtros</span>
-            </button>
-          )}
+            {hasFilters && (
+              <button type="button" className="btn-sec-pro btn-clear-filters" onClick={clearFilters}>
+                <IconX size={14} />
+                <span>Limpiar filtros</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <SortRuleHelp windowDays={windowDays} />
@@ -1075,7 +728,12 @@ export default function Today() {
 
       <div className="today-layout">
         {data?.today && !error && (
-          <TodaySummary data={data} events={events} dailyLimit={userDailyLimit} />
+          <TodaySummary
+            data={data}
+            events={events}
+            dailyLimit={userDailyLimit}
+            filteredEvent={filteredEvent}
+          />
         )}
         <div className="today-main-column" aria-busy={isLoading} style={{ width: '100%' }}>
           {content}
@@ -1084,44 +742,49 @@ export default function Today() {
 
       {toast && (
         <div
-          className={`banner-alert ${toast.type === 'error' ? 'banner-error' : 'banner-success'}`}
+          className={`banner-alert today-toast ${toast.type === 'error' ? 'banner-error' : 'banner-success'}`}
           role={toast.type === 'error' ? 'alert' : 'status'}
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 9999,
-            maxWidth: 'min(440px, calc(100vw - 48px))',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          }}
         >
           {toast.type === 'error' ? (
             <IconAlertTriangle size={18} className="icon-rose" />
           ) : (
             <IconCheckCircle size={18} className="icon-emerald" />
           )}
-          <span>{toast.message}</span>
-          {toast.undoChanges ? (
-            <button
-              type="button"
-              className="btn-sec-pro btn-small"
-              onClick={handleUndo}
-              style={{ marginLeft: '8px' }}
-            >
-              Deshacer
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn-sec-pro btn-small"
-              onClick={closeToast}
-              aria-label="Cerrar mensaje"
-              style={{ marginLeft: '8px' }}
-            >
-              <IconX size={14} />
-            </button>
-          )}
+          <span className="today-toast-message">{toast.message}</span>
+          <div className="today-toast-actions">
+            {toast.link && (
+              <Link to={toast.link.to} className="btn-sec-pro btn-small" onClick={closeToast}>
+                {toast.link.label}
+              </Link>
+            )}
+            {toast.undoChanges ? (
+              <button type="button" className="btn-sec-pro btn-small" onClick={handleUndo}>
+                Deshacer
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-sec-pro btn-small"
+                onClick={closeToast}
+                aria-label="Cerrar mensaje"
+              >
+                <IconX size={14} />
+              </button>
+            )}
+          </div>
         </div>
+      )}
+
+      {editingTask && (
+        <SubtaskEditModal
+          key={editingTask.task.id}
+          task={editingTask.task}
+          eventDate={eventDateById.get(editingTask.task.event_id)}
+          initialForm={editingTask.initialForm}
+          onSaved={(updatedTask) => handleSavedSubtask(editingTask.task, updatedTask)}
+          onConflict={handleEditConflict}
+          onCancel={() => setEditingTask(null)}
+        />
       )}
 
       {conflictState && (
@@ -1135,11 +798,17 @@ export default function Today() {
             // La "foto previa" es la gestión guardada, no el formulario con la fecha nueva
             const original = conflictState.original
             setConflictState(null)
-            handleCancelEditSubtask(original.id)
+            setEditingTask(null)
             loadToday()
             showUndoToast(original, updatedTask, message)
           }}
-          onCancel={() => setConflictState(null)}
+          onCancel={() => {
+            const pendingEdit = conflictState.initialForm
+              ? { task: conflictState.original, initialForm: conflictState.initialForm }
+              : null
+            setConflictState(null)
+            if (pendingEdit) setEditingTask(pendingEdit)
+          }}
         />
       )}
 
