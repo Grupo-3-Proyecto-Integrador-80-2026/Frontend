@@ -180,6 +180,16 @@ export function validateEventField(fieldName, value, { originalDate } = {}) {
       return null
     }
 
+    case 'event_time': {
+      if (!strValue) {
+        return 'La hora del evento es obligatoria.'
+      }
+      if (!/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(strValue)) {
+        return 'Ingresa una hora válida (HH:MM).'
+      }
+      return null
+    }
+
     case 'event_type': {
       if (!strValue) {
         return 'Debes seleccionar un tipo de evento.'

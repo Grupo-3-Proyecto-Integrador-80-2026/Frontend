@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import {
   IconCalendar,
   IconClock,
@@ -13,8 +13,8 @@ import { useAuth } from '../auth/AuthContext'
 import DailyLimitModal from './DailyLimitModal'
 
 const NAV_ITEMS = [
+  { to: '/crear', label: 'Crear evento', Icon: IconPlus, primary: true },
   { to: '/hoy', label: 'Hoy', Icon: IconClock },
-  { to: '/crear', label: 'Crear evento', Icon: IconPlus },
   { to: '/eventos', label: 'Eventos', Icon: IconCalendarDays },
   { to: '/progreso', label: 'Progreso', Icon: IconBarChart },
 ]
@@ -87,16 +87,20 @@ export default function Sidebar({ isMobileOpen, onCloseMobile }) {
           </div>
 
           <nav className="sidebar-nav" aria-label="Navegación principal">
-            {NAV_ITEMS.map(({ to, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                onClick={onCloseMobile}
-                className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <Icon size={18} />
-                <span>{label}</span>
-              </NavLink>
+            {NAV_ITEMS.map(({ to, label, Icon, primary }) => (
+              <Fragment key={to}>
+                <NavLink
+                  to={to}
+                  onClick={onCloseMobile}
+                  className={({ isActive }) =>
+                    `sidebar-nav-item ${primary ? 'sidebar-nav-item--primary' : ''} ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </NavLink>
+                {primary && <div className="sidebar-nav-separator" role="separator" />}
+              </Fragment>
             ))}
           </nav>
         </div>
